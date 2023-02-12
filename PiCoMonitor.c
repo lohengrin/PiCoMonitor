@@ -12,7 +12,7 @@
 uint16_t get_message(uint8_t *buffer) {
   uint16_t buffer_index= 0;
   while (true) {
-    int c = getchar_timeout_us(1000);
+    int c = getchar_timeout_us(1000000);
     if (c != PICO_ERROR_TIMEOUT && buffer_index < BUFFER_LENGTH-1) {
       buffer[buffer_index++] = (c & 0xFF);
     } else {
