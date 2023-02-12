@@ -1,2 +1,4 @@
-# PiCoMonitor
-Raspberry pico based pc monitor
+PCMonitor
+---------
+
+
