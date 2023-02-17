@@ -1,7 +1,7 @@
 #include "Com.h"
 
 // Read json form first { to last }
-uint16_t get_data(uint8_t *buffer, size_t size)
+uint16_t get_data(char *buffer, size_t size)
 {
 	uint16_t buffer_index = 0;
 	int level = 0;
