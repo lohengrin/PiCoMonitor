@@ -16,7 +16,12 @@ pico_sdk_init()
 
 # rest of your project
 add_executable(PiCoMonitor
-	PiCoMonitor.c
+    picojson.h
+    Com.h
+    Com.cpp
+    Screen.h
+    Screen.cpp
+	PiCoMonitor.cpp
    )
 
 # Add pico_stdlib library which aggregates commonly used features

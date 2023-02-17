@@ -7,10 +7,11 @@ import time
 while True:
     CPU_usage = psutil.cpu_percent(interval=1, percpu=True)
     ram = psutil.virtual_memory()
-    ram_free = ram.free // 2**20
+    sensors = psutil.sensors_temperatures()
 
-    print(str(len(CPU_usage)) + ":" + str(CPU_usage))
-    print(ram_free)
+    print("CPU:" + str(len(CPU_usage)) + " " + str(CPU_usage))
+    print("RAM:" + str(ram))
+    print("TEM:" + str(sensors))
     
     time.sleep(1)
     
