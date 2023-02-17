@@ -8,8 +8,11 @@ endif()
 # initialize the SDK based on PICO_SDK_PATH
 # note: this must happen before project()
 include(pico_sdk_import.cmake)
+include(pimoroni_pico_import.cmake)
 
-project(PiCoMonitor)
+project(PiCoMonitor C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -24,10 +27,23 @@ add_executable(PiCoMonitor
 	PiCoMonitor.cpp
    )
 
+include(common/pimoroni_i2c)
+include(common/pimoroni_bus)
+include(libraries/pico_display/pico_display)
+include(libraries/pico_graphics/pico_graphics)
+include(libraries/bitmap_fonts/bitmap_fonts)
+include(libraries/hershey_fonts/hershey_fonts)
+include(drivers/st7789/st7789)
+
 # Add pico_stdlib library which aggregates commonly used features
 target_link_libraries(PiCoMonitor 
     pico_stdlib
     pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
+    hardware_spi
+    hardware_pwm
+    hardware_dma
+    pico_display
+    st7789
 )
 
 pico_enable_stdio_usb(PiCoMonitor 1)
