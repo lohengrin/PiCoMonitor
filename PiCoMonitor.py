@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # coding=utf-8
 
 import psutil, json
@@ -6,7 +6,7 @@ import time
 import serial
 
 def cpu_usage(json_key):
-    cpu_usage = psutil.cpu_percent(interval=1, percpu=True)
+    cpu_usage = psutil.cpu_percent(interval=0.5, percpu=True)
     json_key['CPU'] = cpu_usage
 
 def cpu_temp(json_key):
@@ -32,7 +32,6 @@ while True:
             data = json.dumps(json_key) 
             ser.write(data.encode('ascii'))
 
-            time.sleep(5)
     except serial.SerialException as e:
         print('Disconnected: ' + str(e))
 

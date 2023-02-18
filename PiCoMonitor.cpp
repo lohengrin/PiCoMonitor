@@ -1,7 +1,7 @@
 #include <stdio.h>
 
-#include "picojson.h"
 #include "Com.h"
+#include "Screen.h"
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
@@ -23,6 +23,8 @@ int main()
 	char buffer[BUFFER_LENGTH];
 	memset(buffer, 0, BUFFER_LENGTH);
 
+	Screen screen;
+
 	while (true)
 	{
 		// Read next message
@@ -30,37 +32,19 @@ int main()
 		if (len > 0)
 		{
 			// Blink led after each receive message
-			cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led);
-			led = (led) ? 0 : 1;
+			// cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led);
+			// led = (led) ? 0 : 1;
 
 			// Decode data
-			std::vector<double> cpu_percent;
-			double temp = 0.0;
-			double ram = 0.0;
+			MonitorData data;
+			if (!decode_data(buffer, len, data))
+				continue;
 
-			picojson::value v;
-			std::string err = picojson::parse(v, std::string(buffer));
-			if (! err.empty()) continue;
-			if (! v.is<picojson::object>()) continue;
-
-			const auto& obj = v.get<picojson::object>();
-			for (auto&& i = obj.begin(); i != obj.end(); ++i) 
-			{
-				if (i->first == "CPU" && i->second.is<picojson::array>())
-				{
-					const auto& arr = i->second.get<picojson::array>();
-					for (auto&& j = arr.begin(); j != arr.end(); ++j) 
-						cpu_percent.push_back(j->get<double>());
-				}
-				else if (i->first == "TEMP")
-				{
-					temp = i->second.get<double>();
-				}
-				else if (i->first == "RAM")
-				{
-					ram = i->second.get<double>();
-				}
-			}
+			// Display
+			screen.clear();
+			for ( int i = 0; i < data.cpu_percent.size(); ++i)
+				screen.drawBar(screen.width() - (5+11*i), 0 , screen.height(), data.cpu_percent[i]/100.);
+			screen.update();
 		}
 	}
 	return 0;
