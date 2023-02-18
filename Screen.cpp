@@ -9,7 +9,7 @@ Screen::Screen() :
     BG = graphics.create_pen(0,0,50);
     BAR_G = graphics.create_pen( 32, 180, 96);
     BAR_Y = graphics.create_pen(230, 126, 34);
-    BAR_R = graphics.create_pen(200,  57, 43);
+    BAR_R = graphics.create_pen(255,  57, 43);
 }
 
 int Screen::width() const
