@@ -27,7 +27,7 @@ while True:
             cpu_usage(json_key)
             cpu_temp(json_key)
             percent_mem(json_key)
-            print(json.dumps(json_key))
+            print(json.dumps(json_key), end='\r')
 
             data = json.dumps(json_key) 
             ser.write(data.encode('ascii'))

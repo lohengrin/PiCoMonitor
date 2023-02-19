@@ -12,6 +12,11 @@ int main()
 {
 	stdio_init_all();
 
+	Screen screen;
+	screen.clear();
+	screen.update();
+
+
 	// Init Wifi
 	if (cyw43_arch_init())
 	{
@@ -23,7 +28,7 @@ int main()
 	char buffer[BUFFER_LENGTH];
 	memset(buffer, 0, BUFFER_LENGTH);
 
-	Screen screen;
+	std::deque<double> temps;
 
 	while (true)
 	{
@@ -40,11 +45,27 @@ int main()
 			if (!decode_data(buffer, len, data))
 				continue;
 
-			// Display
+			// Display CPU perfo
 			screen.clear();
 			for ( int i = 0; i < data.cpu_percent.size(); ++i)
-				screen.drawBar(screen.width() - (5+11*i), 0 , screen.height(), data.cpu_percent[i]/100.);
+				screen.drawBar(screen.width() - (5+11*i), 0 , screen.height()/2, data.cpu_percent[i]/100.);
+
+			const int graphSize = data.cpu_percent.size()*11 + 10;
+
+			// Separator
+			screen.drawLine(screen.width(), screen.height()/2 + 1, screen.width() - graphSize, screen.height()/2 + 1);
+
+			// Temp graph
+			temps.push_back(data.temp);
+
+			while (temps.size() > graphSize)
+				temps.pop_front();
+
+			screen.drawGraph(screen.width()-graphSize, screen.height()/2 + 5, screen.width(), screen.height(), temps);
+
+
 			screen.update();
+
 		}
 	}
 	return 0;

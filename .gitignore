@@ -52,3 +52,5 @@ Mkfile.old
 dkms.conf
 
 build/
+pico_display_demo.cpp
+.vscode
