@@ -30,6 +30,8 @@ add_executable(PiCoMonitor
     NullWidget.cpp
     CPUWidget.h
     CPUWidget.cpp
+    GraphWidget.h
+    GraphWidget.cpp
 	PiCoMonitor.cpp
    )
 

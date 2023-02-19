@@ -4,6 +4,7 @@
 #include "Screen.h"
 #include "NullWidget.h"
 #include "CPUWidget.h"
+#include "GraphWidget.h"
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
@@ -26,14 +27,16 @@ int main()
 	std::unique_ptr<NullWidget> wur(new NullWidget("UR"));
 
 	std::unique_ptr<CPUWidget>  cpu(new CPUWidget());
+	std::unique_ptr<GraphWidget>  temp(new GraphWidget(100,Color(255,0,0), "°C"));
 
 	std::unique_ptr<NullWidget> full(new NullWidget("FF"));
 
 //	screen.addWidget(wbl.get(),Screen::BL);
 	screen.addWidget(wbr.get(),Screen::BR);
 	screen.addWidget(wul.get(),Screen::UL);
-	screen.addWidget(wur.get(),Screen::UR);
+//	screen.addWidget(wur.get(),Screen::UR);
 
+	screen.addWidget(temp.get(),Screen::UR);
 	screen.addWidget(cpu.get(),Screen::BL);
 
 //	screen.addWidget(full.get(),Screen::FS);
@@ -70,6 +73,7 @@ int main()
 				continue;
 
 			cpu->setValues(data.cpu_percent);
+			temp->pushValue(data.temp);
 
 #if 0
 			// Display CPU perfo

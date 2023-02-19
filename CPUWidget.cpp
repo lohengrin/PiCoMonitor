@@ -42,8 +42,6 @@ void CPUWidget::draw()
     int spacing = width() / cpuValues.size();
     float maxy = height() - 2;
 
-
-
     for (size_t i = 0; i < cpuValues.size(); ++i)
     {
         float value = cpuValues[i] / 100.0f;
@@ -57,7 +55,7 @@ void CPUWidget::draw()
         int sizeval = (int)(maxy * value);
 
         Point p1(spacing + 1 + bl.x + i * spacing, br.y - 1);
-        Point p2(spacing + 1 + bl.x + i * spacing, br.y - sizeval);
+        Point p2(spacing + 1 + bl.x + i * spacing, br.y - 1 - sizeval);
         graphics->thick_line(p1, p2, spacing-1);
     }
 }

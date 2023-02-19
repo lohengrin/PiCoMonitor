@@ -3,6 +3,11 @@
 #include "pico_display.hpp"
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
+struct Color {
+    Color(int _r=0, int _g=0, int _b=0) : r(_r), g(_g), b(_b) {}
+    int r,g,b;
+};
+
 class Widget {
 public:
     Widget();
