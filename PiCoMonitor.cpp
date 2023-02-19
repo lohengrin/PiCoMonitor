@@ -2,9 +2,13 @@
 
 #include "Com.h"
 #include "Screen.h"
+#include "NullWidget.h"
+#include "CPUWidget.h"
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+
+#include <memory>
 
 #define BUFFER_LENGTH 512
 
@@ -13,9 +17,29 @@ int main()
 	stdio_init_all();
 
 	Screen screen;
-	screen.clear();
-	screen.update();
 
+	screen.clear();
+
+	std::unique_ptr<NullWidget> wbl(new NullWidget("BL"));
+	std::unique_ptr<NullWidget> wbr(new NullWidget("BR"));
+	std::unique_ptr<NullWidget> wul(new NullWidget("UL"));
+	std::unique_ptr<NullWidget> wur(new NullWidget("UR"));
+
+	std::unique_ptr<CPUWidget>  cpu(new CPUWidget());
+
+	std::unique_ptr<NullWidget> full(new NullWidget("FF"));
+
+//	screen.addWidget(wbl.get(),Screen::BL);
+	screen.addWidget(wbr.get(),Screen::BR);
+	screen.addWidget(wul.get(),Screen::UL);
+	screen.addWidget(wur.get(),Screen::UR);
+
+	screen.addWidget(cpu.get(),Screen::BL);
+
+//	screen.addWidget(full.get(),Screen::FS);
+
+	screen.draw();
+	screen.update();
 
 	// Init Wifi
 	if (cyw43_arch_init())
@@ -45,8 +69,10 @@ int main()
 			if (!decode_data(buffer, len, data))
 				continue;
 
+			cpu->setValues(data.cpu_percent);
+
+#if 0
 			// Display CPU perfo
-			screen.clear();
 			for ( int i = 0; i < data.cpu_percent.size(); ++i)
 				screen.drawBar(screen.width() - (5+11*i), 0 , screen.height()/2, data.cpu_percent[i]/100.);
 
@@ -62,10 +88,11 @@ int main()
 				temps.pop_front();
 
 			screen.drawGraph(screen.width()-graphSize, screen.height()/2 + 5, screen.width(), screen.height(), temps);
+#endif
 
-
+			screen.clear();
+			screen.draw();
 			screen.update();
-
 		}
 	}
 	return 0;

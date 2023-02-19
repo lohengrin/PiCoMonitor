@@ -4,6 +4,8 @@
 #include "drivers/st7789/st7789.hpp"
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
+#include "Widget.h"
+
 #include <deque>
 
 class Screen
@@ -11,22 +13,38 @@ class Screen
     public:
         Screen();
 
-        int width() const;
-        int height() const;
+        // Screen
+        int width() const  { return pimoroni::PicoDisplay::WIDTH;   }
+        int height() const { return pimoroni::PicoDisplay::HEIGHT;  }
+        int xmax() const   { return pimoroni::PicoDisplay::WIDTH-1; }
+        int ymax() const   { return pimoroni::PicoDisplay::HEIGHT-1;}
+        int halfw() const   { return pimoroni::PicoDisplay::WIDTH/2; }
+        int halfh() const   { return pimoroni::PicoDisplay::HEIGHT/2;}
+
+        // Widget slots
+        enum Slot {
+            UL, // Uper Left
+            BR, // Bottom Right
+            UR, // Upper Right
+            BL, // Bottom Left
+            FS  // Full Screen
+        };
+
+        // Widget
+        void addWidget(Widget * w, Slot pos);
 
         // Drawing
         void clear();
+        void draw();
+        void update();
 
         void drawBar(int x, int y, int size, float value);
         void drawLine(int x1, int y1, int x2, int y2);
-
         void drawGraph(int x1, int y1, int x2, int y2, std::deque<double>& data);
-
-        void update();
 
     private:
         pimoroni::ST7789 st7789;
-        pimoroni::PicoGraphics_PenRGB332 graphics;
+        pimoroni::PicoGraphics_PenRGB565 graphics;
 
         pimoroni::Pen BG; // Background pen
         pimoroni::Pen BAR_G; // bar pen
@@ -34,5 +52,7 @@ class Screen
         pimoroni::Pen BAR_R; // bar pen
         pimoroni::Pen LINE; // line pen
         pimoroni::Pen GRAPH; // graph pen
+
+        std::vector<Widget*> myWidgets;
 
 };

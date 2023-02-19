@@ -2,6 +2,7 @@
 
 using namespace pimoroni;
 
+//----------------------------------------------------------------------
 Screen::Screen() :
     st7789(PicoDisplay::WIDTH, PicoDisplay::HEIGHT, ROTATE_0, false, get_spi_pins(BG_SPI_FRONT)),
     graphics(st7789.width, st7789.height, nullptr)
@@ -12,23 +13,43 @@ Screen::Screen() :
     BAR_R = graphics.create_pen(255,  20, 15);
     LINE = graphics.create_pen(255, 255, 255);
     GRAPH = graphics.create_pen(0,  50, 255);
-
 }
 
-int Screen::width() const
+//----------------------------------------------------------------------
+void Screen::addWidget(Widget *w, Slot pos)
 {
-    return  PicoDisplay::WIDTH;   
+    switch (pos) {
+        default:
+        case UL: w->setPosition(Point(0      , 0         ), Point(halfw()-1, halfh())); break;
+        case UR: w->setPosition(Point(halfw(), 0         ), Point(xmax()   , halfh())); break;
+        case BL: w->setPosition(Point(0      , halfh()+1 ), Point(halfw()-1, ymax() )); break;
+        case BR: w->setPosition(Point(halfw(), halfh()+1 ), Point(xmax()   , ymax() )); break;
+        case FS: w->setPosition(Point(0      , 0         ), Point(xmax()   , ymax() )); break;
+    };
+    w->setGraphics(&graphics);
+    w->init();
+    myWidgets.push_back(w);
 }
 
-int Screen::height() const
-{
-    return  PicoDisplay::HEIGHT;
-}
-
+//----------------------------------------------------------------------
 void Screen::clear()
 {
     graphics.set_pen(BG);
     graphics.clear();
+}
+
+//----------------------------------------------------------------------
+void Screen::draw()
+{
+    for (auto w : myWidgets)
+        w->draw();
+}
+
+//----------------------------------------------------------------------
+void Screen::update()
+{
+    // update screen
+    st7789.update(&graphics);
 }
 
 void Screen::drawBar(int x, int y, int size, float value)
@@ -71,10 +92,4 @@ void Screen::drawGraph(int x1, int y1, int x2, int y2, std::deque<double>& data)
             graphics.line(p1,p2);
         }
     }
-}
-
-void Screen::update()
-{
-    // update screen
-    st7789.update(&graphics);
 }

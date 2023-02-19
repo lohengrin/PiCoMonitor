@@ -24,6 +24,12 @@ add_executable(PiCoMonitor
     Com.cpp
     Screen.h
     Screen.cpp
+    Widget.h
+    Widget.cpp
+    NullWidget.h
+    NullWidget.cpp
+    CPUWidget.h
+    CPUWidget.cpp
 	PiCoMonitor.cpp
    )
 
@@ -51,3 +57,5 @@ pico_enable_stdio_uart(PiCoMonitor 0)
 
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(PiCoMonitor)
+
+
