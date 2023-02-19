@@ -32,6 +32,8 @@ add_executable(PiCoMonitor
     CPUWidget.cpp
     GraphWidget.h
     GraphWidget.cpp
+    DiskWidget.h
+    DiskWidget.cpp
 	PiCoMonitor.cpp
    )
 
@@ -42,6 +44,7 @@ include(libraries/pico_graphics/pico_graphics)
 include(libraries/bitmap_fonts/bitmap_fonts)
 include(libraries/hershey_fonts/hershey_fonts)
 include(drivers/st7789/st7789)
+include(drivers/rgbled/rgbled)
 
 # Add pico_stdlib library which aggregates commonly used features
 target_link_libraries(PiCoMonitor 
@@ -52,6 +55,7 @@ target_link_libraries(PiCoMonitor
     hardware_dma
     pico_display
     st7789
+    rgbled
 )
 
 pico_enable_stdio_usb(PiCoMonitor 1)

@@ -5,7 +5,7 @@
 
 struct Color {
     Color(int _r=0, int _g=0, int _b=0) : r(_r), g(_g), b(_b) {}
-    int r,g,b;
+    uint8_t r,g,b;
 };
 
 class Widget {

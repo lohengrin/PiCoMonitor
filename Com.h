@@ -3,9 +3,17 @@
 #include "pico/stdlib.h"
 
 #include <vector>
+#include <string>
 
 struct MonitorData {
+    struct DiskData {
+        std::string label;
+        double total;
+        double used;
+    };
+
     std::vector<double> cpu_percent;
+    std::vector<DiskData> disks;
     double ram;
     double temp;
 };

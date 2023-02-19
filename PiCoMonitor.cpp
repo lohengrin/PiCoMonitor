@@ -5,13 +5,20 @@
 #include "NullWidget.h"
 #include "CPUWidget.h"
 #include "GraphWidget.h"
+#include "DiskWidget.h"
 
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "rgbled.hpp"
 
 #include <memory>
 
 #define BUFFER_LENGTH 512
+#define LI 50 // Led intensity
+
+using namespace pimoroni;
+
+RGBLED led(PicoDisplay::LED_R, PicoDisplay::LED_G, PicoDisplay::LED_B);
 
 int main()
 {
@@ -21,25 +28,17 @@ int main()
 
 	screen.clear();
 
-	std::unique_ptr<NullWidget> wbl(new NullWidget("BL"));
-	std::unique_ptr<NullWidget> wbr(new NullWidget("BR"));
 	std::unique_ptr<NullWidget> wul(new NullWidget("UL"));
-	std::unique_ptr<NullWidget> wur(new NullWidget("UR"));
 
 	std::unique_ptr<CPUWidget>  cpu(new CPUWidget());
-	std::unique_ptr<GraphWidget>  temp(new GraphWidget(100,Color(255,0,0), "°C"));
+	std::unique_ptr<GraphWidget>  temp(new GraphWidget(100,Color(10,10,255), "°C"));
+	std::unique_ptr<GraphWidget>  ram(new GraphWidget(100,Color(10,255,10), "RAM"));
+	std::unique_ptr<DiskWidget>  disks(new DiskWidget());
 
-	std::unique_ptr<NullWidget> full(new NullWidget("FF"));
-
-//	screen.addWidget(wbl.get(),Screen::BL);
-	screen.addWidget(wbr.get(),Screen::BR);
-	screen.addWidget(wul.get(),Screen::UL);
-//	screen.addWidget(wur.get(),Screen::UR);
-
+	screen.addWidget(ram.get(),Screen::UL);
 	screen.addWidget(temp.get(),Screen::UR);
 	screen.addWidget(cpu.get(),Screen::BL);
-
-//	screen.addWidget(full.get(),Screen::FS);
+	screen.addWidget(disks.get(),Screen::BR);
 
 	screen.draw();
 	screen.update();
@@ -51,11 +50,11 @@ int main()
 		return -1;
 	}
 
-	int led = 0;
 	char buffer[BUFFER_LENGTH];
 	memset(buffer, 0, BUFFER_LENGTH);
 
-	std::deque<double> temps;
+	Color ledcolor(0,0,0);
+	led.set_rgb(ledcolor.r, ledcolor.g, ledcolor.b);
 
 	while (true)
 	{
@@ -63,37 +62,25 @@ int main()
 		uint16_t len = get_data(buffer, BUFFER_LENGTH);
 		if (len > 0)
 		{
-			// Blink led after each receive message
-			// cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led);
-			// led = (led) ? 0 : 1;
+			// LED Color cycling
+			if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(LI,0,0);
+			else if (ledcolor.r == LI && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(0,LI,0);
+			else if (ledcolor.r == 0  && ledcolor.g == LI && ledcolor.b == 0  ) ledcolor = Color(0,0,LI);
+			else if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == LI ) ledcolor = Color(LI,0,0);
+			led.set_rgb(ledcolor.r, ledcolor.g, ledcolor.b);
 
 			// Decode data
 			MonitorData data;
 			if (!decode_data(buffer, len, data))
 				continue;
 
+			// Update data
 			cpu->setValues(data.cpu_percent);
 			temp->pushValue(data.temp);
+			disks->setValues(data.disks);
+			ram->pushValue(data.ram);
 
-#if 0
-			// Display CPU perfo
-			for ( int i = 0; i < data.cpu_percent.size(); ++i)
-				screen.drawBar(screen.width() - (5+11*i), 0 , screen.height()/2, data.cpu_percent[i]/100.);
-
-			const int graphSize = data.cpu_percent.size()*11 + 10;
-
-			// Separator
-			screen.drawLine(screen.width(), screen.height()/2 + 1, screen.width() - graphSize, screen.height()/2 + 1);
-
-			// Temp graph
-			temps.push_back(data.temp);
-
-			while (temps.size() > graphSize)
-				temps.pop_front();
-
-			screen.drawGraph(screen.width()-graphSize, screen.height()/2 + 5, screen.width(), screen.height(), temps);
-#endif
-
+			// Render
 			screen.clear();
 			screen.draw();
 			screen.update();

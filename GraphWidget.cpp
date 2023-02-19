@@ -16,8 +16,9 @@ void GraphWidget::init()
 {
     if (!graphics) return;
 
-    AXIS = graphics->create_pen( 255, 255, 255);
+    AXIS = graphics->create_pen( 200, 200, 200);
     VAL = graphics->create_pen(color.r, color.g, color.b);
+    VAL_FILL = graphics->create_pen(color.r/3, color.g/3, color.b/3);
     VAL_INV = graphics->create_pen(abs(255-color.r), abs(255-color.g), abs(255-color.b));
     BORDER = graphics->create_pen(0,  50, 100);
 }
@@ -70,17 +71,15 @@ void GraphWidget::draw()
 
     float maxy = height() - 2;
 
-    graphics->set_pen(VAL);
     for (int i = 0; i < values.size() ; ++i)
     {
+        graphics->set_pen(VAL_FILL);
         Point p1(origin.x+i+1,origin.y - 1);
         Point p2(origin.x+i+1,origin.y - 1 - (values[i]/scale)*maxy);
         graphics->line(p1,p2);
+        graphics->set_pen(VAL);
+        graphics->pixel(p2);
     }
-
-    graphics->set_pen(AXIS);
-    graphics->line(origin,ax);
-    graphics->line(origin,ay);
 
     // Display value
     graphics->set_pen(VAL_INV);

@@ -5,6 +5,36 @@ import psutil, json
 import time
 import serial
 
+def disk_usage(json_key):
+    hdd = psutil.disk_partitions()
+    data = []
+    for each in hdd:
+        path = each.mountpoint
+        fstype = each.fstype
+        # filter devices
+        if fstype != "ext4":
+            continue
+        if path.startswith("/var/"):
+            continue
+
+        label = path
+        if path.startswith("/mnt/"):
+            label = path.replace("/mnt/", "")
+
+        drive = psutil.disk_usage(path)
+        total = drive.total
+        total = total / 1000000000
+        used = drive.used
+        used = used / 1000000000
+        percent = drive.percent
+        drives = {
+            "path": label,
+            "total": float("{0: .2f}".format(total)),
+            "used": float("{0: .2f}".format(used))
+        }
+        data.append(drives)
+    json_key['DISKS'] = data
+
 def cpu_usage(json_key):
     cpu_usage = psutil.cpu_percent(interval=0.5, percpu=True)
     json_key['CPU'] = cpu_usage
@@ -17,6 +47,7 @@ def percent_mem(json_key):
     mem_percent = psutil.virtual_memory().percent
     json_key['RAM'] = mem_percent
 
+
 while True:
     try:
         ser = serial.Serial('/dev/ttyACM0')  # open serial port
@@ -27,6 +58,7 @@ while True:
             cpu_usage(json_key)
             cpu_temp(json_key)
             percent_mem(json_key)
+            disk_usage(json_key)
             print(json.dumps(json_key), end='\r')
 
             data = json.dumps(json_key) 

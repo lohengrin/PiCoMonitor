@@ -51,6 +51,29 @@ bool decode_data(char *buffer, size_t bufsize, MonitorData& data)
 		{
 			data.ram = i->second.get<double>();
 		}
+		else if (i->first == "DISKS" && i->second.is<picojson::array>())
+		{
+			const auto& arr = i->second.get<picojson::array>();
+			for (auto&& j = arr.begin(); j != arr.end(); ++j)
+			{
+				MonitorData::DiskData ddata;
+
+				const auto& dobj = j->get<picojson::object>();
+				for (auto&& d = dobj.begin(); d != dobj.end(); ++d) 
+				{
+
+					if (d->first == "path")
+						ddata.label = d->second.get<std::string>();
+					else if (d->first == "total")
+						ddata.total = d->second.get<double>();
+					else if (d->first == "used")
+						ddata.used = d->second.get<double>();
+				}
+
+				data.disks.push_back(ddata);
+			}
+		}
+
 	}
 
 	return true;

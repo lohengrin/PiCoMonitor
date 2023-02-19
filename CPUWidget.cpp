@@ -52,7 +52,7 @@ void CPUWidget::draw()
         else 
             graphics->set_pen(BAR_R);
 
-        int sizeval = (int)(maxy * value);
+        int sizeval = std::max(1,(int)(maxy * value));
 
         Point p1(spacing + 1 + bl.x + i * spacing, br.y - 1);
         Point p2(spacing + 1 + bl.x + i * spacing, br.y - 1 - sizeval);

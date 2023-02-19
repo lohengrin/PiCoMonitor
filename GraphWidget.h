@@ -14,7 +14,7 @@ public:
     //! Values as % per code
     void pushValue(double val);
 protected:
-    pimoroni::Pen AXIS, VAL, BORDER, VAL_INV;
+    pimoroni::Pen AXIS, VAL, VAL_FILL, BORDER, VAL_INV;
     std::deque<double> values;
     double scale;
     Color color;
