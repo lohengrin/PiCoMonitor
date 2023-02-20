@@ -52,6 +52,11 @@ void Screen::update()
     st7789.update(&graphics);
 }
 
+void Screen::set_backlight(uint8_t val)
+{
+    st7789.set_backlight(val);
+}
+
 void Screen::drawBar(int x, int y, int size, float value)
 {
     if (value < 0.5) 

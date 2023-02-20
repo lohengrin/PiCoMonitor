@@ -38,6 +38,9 @@ class Screen
         void draw();
         void update();
 
+        //! Back ligth control
+        void set_backlight(uint8_t val);
+
         void drawBar(int x, int y, int size, float value);
         void drawLine(int x1, int y1, int x2, int y2);
         void drawGraph(int x1, int y1, int x2, int y2, std::deque<double>& data);

@@ -45,6 +45,7 @@ include(libraries/bitmap_fonts/bitmap_fonts)
 include(libraries/hershey_fonts/hershey_fonts)
 include(drivers/st7789/st7789)
 include(drivers/rgbled/rgbled)
+include(drivers/button/button)
 
 # Add pico_stdlib library which aggregates commonly used features
 target_link_libraries(PiCoMonitor 
@@ -56,6 +57,7 @@ target_link_libraries(PiCoMonitor
     pico_display
     st7789
     rgbled
+    button
 )
 
 pico_enable_stdio_usb(PiCoMonitor 1)
