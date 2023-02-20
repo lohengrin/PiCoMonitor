@@ -62,10 +62,10 @@ void CPUWidget::draw()
         setPenScale(value);
 
         // Compute max
+        cpuValuesMax[i]-=0.01;
+
         if (value > cpuValuesMax[i])
             cpuValuesMax[i] = value;
-        else
-            cpuValuesMax[i]-=0.01;
 
         int sizeval = std::max(1,(int)(maxy * value));
         int sizevalmax = std::max(1,(int)(maxy * cpuValuesMax[i])) + 1;
