@@ -19,23 +19,23 @@ pico_sdk_init()
 
 # rest of your project
 add_executable(PiCoMonitor
-    picojson.h
-    Com.h
-    Com.cpp
-    Screen.h
-    Screen.cpp
-    Widget.h
-    Widget.cpp
-    NullWidget.h
-    NullWidget.cpp
-    CPUWidget.h
-    CPUWidget.cpp
-    GraphWidget.h
-    GraphWidget.cpp
-    DiskWidget.h
-    DiskWidget.cpp
-	PiCoMonitor.cpp
-   )
+src/picojson.h
+src/Com.h
+src/Com.cpp
+src/Screen.h
+src/Screen.cpp
+src/Widget.h
+src/Widget.cpp
+src/NullWidget.h
+src/NullWidget.cpp
+src/CPUWidget.h
+src/CPUWidget.cpp
+src/GraphWidget.h
+src/GraphWidget.cpp
+src/DiskWidget.h
+src/DiskWidget.cpp
+src/PiCoMonitor.cpp
+)
 
 include(common/pimoroni_i2c)
 include(common/pimoroni_bus)
