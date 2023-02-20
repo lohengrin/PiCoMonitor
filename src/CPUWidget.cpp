@@ -16,6 +16,17 @@ void CPUWidget::init()
     BORDER = graphics->create_pen(0,  50, 100);
 }
 
+void CPUWidget::setPenScale(double value)
+{
+    if (value < 0.5) 
+        graphics->set_pen(BAR_G);
+    else if (value >= 0.5 && value < 0.8 ) 
+        graphics->set_pen(BAR_Y);
+    else 
+        graphics->set_pen(BAR_R);
+}
+
+
 void CPUWidget::draw()
 {
     if (!graphics) return;
@@ -42,20 +53,36 @@ void CPUWidget::draw()
     int spacing = width() / cpuValues.size();
     float maxy = height() - 2;
 
+    cpuValuesMax.resize(cpuValues.size());
+
     for (size_t i = 0; i < cpuValues.size(); ++i)
     {
+        // Color scale according to value
         float value = cpuValues[i] / 100.0f;
-        if (value < 0.5) 
-            graphics->set_pen(BAR_G);
-        else if (value >= 0.5 && value < 0.8 ) 
-            graphics->set_pen(BAR_Y);
-        else 
-            graphics->set_pen(BAR_R);
+        setPenScale(value);
+
+        // Compute max
+        if (value > cpuValuesMax[i])
+            cpuValuesMax[i] = value;
+        else
+            cpuValuesMax[i]-=0.01;
 
         int sizeval = std::max(1,(int)(maxy * value));
+        int sizevalmax = std::max(1,(int)(maxy * cpuValuesMax[i])) + 1;
 
-        Point p1(spacing + 1 + bl.x + i * spacing, br.y - 1);
-        Point p2(spacing + 1 + bl.x + i * spacing, br.y - 1 - sizeval);
-        graphics->thick_line(p1, p2, spacing-1);
+        // Draw bar
+        for (int s = 0; s < spacing-1; s++)
+        {
+            int x = spacing + 1 + bl.x + s + i * spacing - spacing/2;
+            Point p1(x, br.y - 1);
+            Point p2(x, br.y - 1 - sizeval);
+            graphics->line(p1, p2);
+        }
+
+        // Cursor for max value
+        Point pmax1(spacing + 1 + bl.x + i * spacing - spacing/2, br.y - 1 - sizevalmax);
+        Point pmax2(spacing + 1 + bl.x + i * spacing + spacing/2, br.y - 1 - sizevalmax);
+        setPenScale(cpuValuesMax[i]);
+        graphics->line(pmax1, pmax2);
     }
 }

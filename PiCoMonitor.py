@@ -84,8 +84,6 @@ def main():
 
     args = argParser.parse_args()
 
-    print(args)
-
     # Main loop (connect/reconnect)
     while True:
         try:
