@@ -84,6 +84,9 @@ def main():
 
     args = argParser.parse_args()
 
+    # Serial port
+    ser = None
+
     # Main loop (connect/reconnect)
     while True:
         try:
@@ -102,6 +105,8 @@ def main():
                 ser.write(data.encode('ascii'))
 
         except serial.SerialException as e:
+            if ser and ser.is_open:
+                ser.close()
             print('Disconnected: ' + str(e))
 
         time.sleep(5)
