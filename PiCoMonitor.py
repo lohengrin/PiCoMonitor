@@ -64,7 +64,7 @@ def cpu_temp(json_key):
         temps = psutil.sensors_temperatures()
         json_key['TEMP'] = temps['amdgpu'][0][1]
     else:
-        json_key['TEMP'] = 0.0 # Not supported by psutil
+        json_key['TEMP'] = 0 # Not supported by psutil
 
 # Get Mem usage in %
 def percent_mem(json_key):
@@ -87,8 +87,8 @@ def main():
     # Main loop (connect/reconnect)
     while True:
         try:
-            ser = serial.Serial(args.port)  # open serial port
-            print('Opening:' + ser.name)
+            ser = serial.Serial(args.port, baudrate=19200)  # open serial port
+            print('Opening:' + ser.name + ' at ' + str(19200))
 
             # Data loop Until disconnected (exception) grab and send data
             while True:
