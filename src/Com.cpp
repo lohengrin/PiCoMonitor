@@ -10,7 +10,7 @@ uint16_t get_data(char *buffer, size_t size)
 	int level = 0;
 
 	do {
-		int c = getchar_timeout_us(10000);
+		int c = getchar_timeout_us(1000);
 		if (c == PICO_ERROR_TIMEOUT)
 			return 0;
 

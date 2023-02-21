@@ -25,6 +25,8 @@
 
 using namespace pimoroni;
 
+#define PERIOD_US 10000  // 100 Hz
+
 int main()
 {
 	stdio_init_all();
@@ -77,6 +79,8 @@ int main()
 	Button button_x(PicoDisplay::X);
 	Button button_y(PicoDisplay::Y);
 
+	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
+
 	while (true)
 	{
 		// Read next message
@@ -118,8 +122,10 @@ int main()
 			backlight = (backlight >= 10)? backlight-10: 0;
 			screen.set_backlight(backlight);
 		}
-//    	if(button_x.raw()) text_location.y -= 1;
-//    	if(button_y.raw()) text_location.y += 1;
+
+		// Wait next step according to PERIOD_US
+		busy_wait_until(nextStep);
+		nextStep = delayed_by_us(nextStep,PERIOD_US);
 	}
 	return 0;
 }
