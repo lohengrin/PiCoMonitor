@@ -50,7 +50,7 @@ void CPUWidget::draw()
     }
 
     // Display CPU bars, with color change according to level
-    int spacing = width() / cpuValues.size();
+    int spacing = (width() - 2)  / cpuValues.size(); // Pixel per cpu
     float maxy = height() - 2;
 
     cpuValuesMax.resize(cpuValues.size());
@@ -62,26 +62,24 @@ void CPUWidget::draw()
         setPenScale(value);
 
         // Compute max
-        cpuValuesMax[i]-=0.01;
-
+        cpuValuesMax[i]-=0.01; // Slow move down
         if (value > cpuValuesMax[i])
             cpuValuesMax[i] = value;
 
+        // Size in pixel of value
         int sizeval = std::max(1,(int)(maxy * value));
         int sizevalmax = std::max(1,(int)(maxy * cpuValuesMax[i])) + 1;
 
         // Draw bar
-        for (int s = 0; s < spacing-1; s++)
-        {
-            int x = spacing + 1 + bl.x + s + i * spacing - spacing/2;
-            Point p1(x, br.y - 1);
-            Point p2(x, br.y - 1 - sizeval);
-            graphics->line(p1, p2);
-        }
+        int x1 = bl.x + 1 + i * spacing;            // left of each bar
+        int x2 = bl.x + 1 + i * spacing + spacing-1; // right of each bar
+        Point p1(x1, br.y - 1 - sizeval);
+        Point p2(x2, br.y - 1);
+        graphics->rectangle(Rect(p1, p2));
 
         // Cursor for max value
-        Point pmax1(spacing + 1 + bl.x + i * spacing - spacing/2, br.y - 1 - sizevalmax);
-        Point pmax2(spacing + 1 + bl.x + i * spacing + spacing/2, br.y - 1 - sizevalmax);
+        Point pmax1(bl.x + 1 + i * spacing, br.y - 1 - sizevalmax);
+        Point pmax2(bl.x + 1 + i * spacing + spacing-1, br.y - 1 - sizevalmax);
         setPenScale(cpuValuesMax[i]);
         graphics->line(pmax1, pmax2);
     }
