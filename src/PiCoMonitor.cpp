@@ -18,6 +18,7 @@
 #endif
 
 #include <memory>
+#include <string.h>
 
 #define BUFFER_LENGTH 512
 #define LI 25 // Led intensity
