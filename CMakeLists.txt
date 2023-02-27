@@ -50,7 +50,6 @@ include(drivers/button/button)
 # Add pico_stdlib library which aggregates commonly used features
 target_link_libraries(PiCoMonitor 
     pico_stdlib
-    pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
     hardware_spi
     hardware_pwm
     hardware_dma
@@ -59,6 +58,12 @@ target_link_libraries(PiCoMonitor
     rgbled
     button
 )
+
+IF (${PICO_BOARD} STREQUAL "pico_w")
+target_link_libraries(PiCoMonitor 
+    pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
+)
+ENDIF()
 
 pico_enable_stdio_usb(PiCoMonitor 1)
 pico_enable_stdio_uart(PiCoMonitor 0)
