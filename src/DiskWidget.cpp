@@ -44,7 +44,7 @@ void DiskWidget::draw()
 
     for (size_t i = 0; i < values.size(); ++i)
     {
-        auto value = values[i];
+        auto value = values[values.size()-1-i];
         float ratio = value.used / value.total;
 
         graphics->set_pen(BORDER);
