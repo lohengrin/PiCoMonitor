@@ -6,6 +6,10 @@ import time
 import serial
 import sys
 import argparse
+import pystray
+
+from PIL import Image, ImageDraw
+from pystray import Menu, MenuItem
 
 # Get disk usage information
 # Search all disk and get usages
@@ -71,32 +75,39 @@ def percent_mem(json_key):
     mem_percent = psutil.virtual_memory().percent
     json_key['RAM'] = mem_percent
 
-# Main
-def main():
+def create_image(width, height, color1, color2):
+    # Generate an image and draw a pattern
+    image = Image.new('RGB', (width, height), color1)
+    dc = ImageDraw.Draw(image)
+    dc.rectangle((width // 2, 0, width, height // 2),  fill=color2)
+    dc.rectangle((0, height // 2, width // 2, height), fill=color2)
+    return image
 
-    # parse args
-    argParser = argparse.ArgumentParser()
-    argParser.add_argument("-d", "--delay", help="Period for grabbing data (s)", type=float, default=0.5)
-    if sys.platform.startswith("linux"):
-        argParser.add_argument("-p", "--port", help="Serial port of pico", default="/dev/ttyACM0")
-    else:
-        argParser.add_argument("-p", "--port", help="Serial port of pico", default="COM3")
+# Serial port
+ser = None
+args = None
 
-    args = argParser.parse_args()
+contflag = True
+delay = 0
 
-    # Serial port
-    ser = None
-
+def work_loop(icon ):
+    global args
+    global ser
+    global contflag
+    global delay
+    
+    delay = args.delay
+    icon.visible = True
     # Main loop (connect/reconnect)
-    while True:
+    while contflag:
         try:
             ser = serial.Serial(args.port, baudrate=19200)  # open serial port
             print('Opening:' + ser.name + ' at ' + str(19200))
 
             # Data loop Until disconnected (exception) grab and send data
-            while True:
+            while contflag:
                 json_key={}
-                cpu_usage(json_key, args.delay)
+                cpu_usage(json_key, delay)
                 cpu_temp(json_key)
                 percent_mem(json_key)
                 disk_usage(json_key)
@@ -109,7 +120,59 @@ def main():
                 ser.close()
             print('Disconnected: ' + str(e))
 
-        time.sleep(5)
+        # Wait before reconnect except if exiting
+        if contflag:
+            time.sleep(5)
+        
+    # Close serial port
+    if ser and ser.is_open:
+        ser.close()
 
+# Menu of systray
+# Exit callback
+def exit_action(icon):
+    global contflag
+    
+    contflag = False
+    icon.visible = False  # Need it to stop the main while loop. I think any global var also will do the thing
+    icon.stop()  # Stop icon thread (?)
+
+# Change delay
+def set_delay( d ):
+    global delay
+    delay = d
+
+def get_delay( d ):
+    global delay
+    return delay == d
+
+# Main
+def main():
+    global args
+    global ser
+    
+    # parse args
+    argParser = argparse.ArgumentParser()
+    argParser.add_argument("-d", "--delay", help="Period for grabbing data (s)", type=float, default=0.5)
+    if sys.platform.startswith("linux"):
+        argParser.add_argument("-p", "--port", help="Serial port of pico", default="/dev/ttyACM0")
+    else:
+        argParser.add_argument("-p", "--port", help="Serial port of pico", default="COM3")
+
+    args = argParser.parse_args()
+
+    # In order for the icon to be displayed, you must provide an icon
+    icon = pystray.Icon('PiCoMonitor', icon=create_image(64, 64, 'blue', 'white'))
+    icon.menu = Menu(
+                        MenuItem('0.25 s', lambda i : set_delay(0.25), checked=lambda i :get_delay(0.25)),
+                        MenuItem('0.50 s', lambda i : set_delay(0.5), checked=lambda i :get_delay(0.5)),
+                        MenuItem('1.00 s', lambda i : set_delay(1.0), checked=lambda i :get_delay(1.0)),
+                        Menu.SEPARATOR,
+                        MenuItem('Exit', lambda : exit_action(icon)))
+
+    icon.title = 'PiCoMonitor informations grab tool'
+    # To finally show you icon, call run
+    icon.run(work_loop)
+    
 if __name__ == "__main__":
     main()
