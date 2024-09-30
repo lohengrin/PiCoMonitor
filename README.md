@@ -10,7 +10,7 @@ Rasberry pico (w) based pc monitoring. Use pico display pack from Pimoroni [http
 Feed by a Python script using psutil + serial.
 Transmission of data over USB serial is done by JSON data (see [exemple.json](exemple.json) )
 
-**PiCoMonitor.py** python script support Linux and Windows (need psutil, pyserial, json, psystray).
+**PiCoMonitor.py** python script support Linux and Windows (need psutil, pyserial, pystray).
 CPU Temp is not supported on Windows yet.
 This script need to be modified to fit your hardware/software configuration.
 
