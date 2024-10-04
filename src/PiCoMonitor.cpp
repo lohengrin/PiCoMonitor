@@ -8,13 +8,16 @@
 #include "DiskWidget.h"
 
 // Pimodori display RGB led
-#include "rgbled.hpp"
-#include "button.hpp"
+#ifdef WITH_PICODISPLAY
+	#include "rgbled.hpp"
+	#include "button.hpp"
+#endif
 
 // PICO SDK
 #include "pico/stdlib.h"
+
 #ifdef RASPBERRYPI_PICO_W
-#include "pico/cyw43_arch.h"
+	#include "pico/cyw43_arch.h"
 #endif
 
 #include <memory>
@@ -43,8 +46,23 @@ int main()
 #endif
 #endif
 
+#ifdef WITH_CROWPANEL
+	// Reset LCD pin 15 before initializing SPI LCD
+	gpio_init(15);
+	gpio_set_dir(15, GPIO_OUT);
+	gpio_put(15, true);
+	sleep_ms(5);
+	gpio_put(15, false);
+	sleep_ms(20);
+	gpio_put(15, true);
+
 	// Screen initialization
-	Screen screen;
+	Screen screen(320,240, PiCoMonitor::ST7789EX::ELECROW);
+#endif
+#ifdef WITH_PICODISPLAY
+	// Screen initialization
+	Screen screen(pimoroni::PicoDisplay::WIDTH, pimoroni::PicoDisplay::HEIGHT, PiCoMonitor::ST7789EX::PIMORONI);
+#endif
 
 	uint8_t backlight = DEFAULT_BACKLIGHT;
 	screen.set_backlight(backlight);
@@ -69,6 +87,7 @@ int main()
 	char buffer[BUFFER_LENGTH];
 	memset(buffer, 0, BUFFER_LENGTH);
 
+#ifdef WITH_PICODISPLAY
 	// RGB Led control
 	Color ledcolor(0,0,0);
 	RGBLED led(PicoDisplay::LED_R, PicoDisplay::LED_G, PicoDisplay::LED_B);
@@ -79,6 +98,7 @@ int main()
 	Button button_b(PicoDisplay::B);
 	Button button_x(PicoDisplay::X);
 	Button button_y(PicoDisplay::Y);
+#endif
 
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
 
@@ -93,12 +113,14 @@ int main()
 			if (!decode_data(buffer, len, data))
 				continue;
 
+#ifdef WITH_PICODISPLAY
 			// LED Color cycling (change color for each valid receive frame)
 			if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(LI,0,0);
 			else if (ledcolor.r == LI && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(0,LI,0);
 			else if (ledcolor.r == 0  && ledcolor.g == LI && ledcolor.b == 0  ) ledcolor = Color(0,0,LI);
 			else if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == LI ) ledcolor = Color(LI,0,0);
 			led.set_rgb(ledcolor.r, ledcolor.g, ledcolor.b);
+#endif
 
 			// Update widget data
 			cpu->setValues(data.cpu_percent);
@@ -112,6 +134,7 @@ int main()
 		screen.draw();
 		screen.update();
 
+#ifdef WITH_PICODISPLAY
 		// Backlight control with A/B buttons
 	    if(button_a.read())
 		{
@@ -123,6 +146,7 @@ int main()
 			backlight = (backlight >= 10)? backlight-10: 0;
 			screen.set_backlight(backlight);
 		}
+#endif
 
 		// Wait next step according to PERIOD_US
 		busy_wait_until(nextStep);

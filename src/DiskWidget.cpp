@@ -40,7 +40,7 @@ void DiskWidget::draw()
 
     // Display CPU bars, with color change according to level
     int spacing = height() / values.size();
-    float maxx = width() - 22;
+    float maxx = width() - 22 - 3;
 
     for (size_t i = 0; i < values.size(); ++i)
     {
@@ -48,8 +48,8 @@ void DiskWidget::draw()
         float ratio = value.used / value.total;
 
         graphics->set_pen(BORDER);
-        Point p1(bl.x + 22          , br.y - spacing/2 - spacing*i);
-        Point p2(bl.x + 22 + width(), br.y - spacing/2 - spacing*i);
+        Point p1(bl.x + 22       , br.y - spacing/2 - spacing*i);
+        Point p2(bl.x + 22 + maxx, br.y - spacing/2 - spacing*i);
         graphics->thick_line(p1, p2, spacing/2);
 
 
@@ -71,6 +71,6 @@ void DiskWidget::draw()
         textPosition.x = bl.x + 4;
         textPosition.y = br.y - spacing/2 - spacing*i;
         graphics->set_font("sans");
-        graphics->text(l, textPosition , 0, 0.4f);
+        graphics->text(l, textPosition , 0, (float) height() / 300.0f);
     }
 }

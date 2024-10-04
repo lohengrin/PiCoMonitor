@@ -10,9 +10,13 @@ endif()
 include(pico_sdk_import.cmake)
 include(pimoroni_pico_import.cmake)
 
+option(WITH_PICODISPLAY "Build for Pimonori LCD" OFF)
+option(WITH_CROWPANEL   "Build for Elecrow CrowPanel" ON)
+
 project(PiCoMonitor C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -41,9 +45,10 @@ include(common/pimoroni_i2c)
 include(common/pimoroni_bus)
 include(libraries/pico_display/pico_display)
 include(libraries/pico_graphics/pico_graphics)
-include(drivers/st7789/st7789)
 include(drivers/rgbled/rgbled)
 include(drivers/button/button)
+
+add_subdirectory(st7789Ex)
 
 # Add pico_stdlib library which aggregates commonly used features
 target_link_libraries(PiCoMonitor 
@@ -52,10 +57,19 @@ target_link_libraries(PiCoMonitor
     hardware_pwm
     hardware_dma
     pico_display
-    st7789
-    rgbled
-    button
+    pico_graphics
+    st7789Ex
 )
+
+IF(WITH_PICODISPLAY)
+    target_link_libraries(PiCoMonitor 
+        rgbled
+        button
+    )
+    target_compile_definitions(PiCoMonitor PRIVATE WITH_PICODISPLAY)
+ELSE()
+    target_compile_definitions(PiCoMonitor PRIVATE WITH_CROWPANEL)
+ENDIF()
 
 IF (${PICO_BOARD} STREQUAL "pico_w")
 target_link_libraries(PiCoMonitor 

@@ -2,10 +2,22 @@
 
 using namespace pimoroni;
 
+SPIPins ElecrowPins {
+  spi1,
+  9U, // CS
+  10U, // SPI CLK
+  11U, // MOSI 
+  12U, // MISO
+  8U,  // DC 
+  18U // BACK LIGHT PWM
+};
+
 //----------------------------------------------------------------------
-Screen::Screen() :
-    st7789(PicoDisplay::WIDTH, PicoDisplay::HEIGHT, ROTATE_0, false, get_spi_pins(BG_SPI_FRONT)),
-    graphics(st7789.width, st7789.height, nullptr)
+Screen::Screen(int width, int height, PiCoMonitor::ST7789EX::Type type) :
+    st7789(width, height, ROTATE_0, false, type, (type==PiCoMonitor::ST7789EX::PIMORONI)?get_spi_pins(BG_SPI_FRONT):ElecrowPins),
+    graphics(width, height, nullptr),
+    myWidth(width),
+    myHeight(height)
 {
     BG = graphics.create_pen(0,0,0);
     BAR_G = graphics.create_pen( 32, 180, 96);
