@@ -25,11 +25,14 @@
 
 #define BUFFER_LENGTH 512
 #define LI 25 // Led intensity
-#define DEFAULT_BACKLIGHT 128 // Screen intensity
+#define DEFAULT_BACKLIGHT 255 // Screen intensity
 
 using namespace pimoroni;
 
 #define PERIOD_US 10000  // 100 Hz
+
+const int64_t DimmingTime = 5000000; // 5 seconds
+const int64_t DimmingSpeed = 10000; // 0.01 seconds
 
 int main()
 {
@@ -101,7 +104,7 @@ int main()
 #endif
 
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
-
+	absolute_time_t  lastUpdate = get_absolute_time();
 	while (true)
 	{
 		// Read next message
@@ -127,6 +130,8 @@ int main()
 			temp->pushValue(data.temp);
 			disks->setValues(data.disks);
 			ram->pushValue(data.ram);
+
+			lastUpdate = get_absolute_time();
 		}
 
 		// Render
@@ -147,6 +152,18 @@ int main()
 			screen.set_backlight(backlight);
 		}
 #endif
+
+		// Manage dimming if no data
+		absolute_time_t  now = get_absolute_time();
+		auto diff = absolute_time_diff_us(lastUpdate, now);
+		if (diff >= DimmingTime)
+		{
+			uint64_t dimDelta = floor((diff-DimmingTime)/DimmingSpeed);
+			if (dimDelta <= backlight)
+				screen.set_backlight(backlight - dimDelta);
+		}
+		else
+			screen.set_backlight(backlight);
 
 		// Wait next step according to PERIOD_US
 		busy_wait_until(nextStep);

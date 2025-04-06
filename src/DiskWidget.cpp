@@ -53,9 +53,9 @@ void DiskWidget::draw()
         graphics->thick_line(p1, p2, spacing/2);
 
 
-        if (ratio < 0.5) 
+        if (ratio < 0.75) 
             graphics->set_pen(BAR_G);
-        else if (ratio >= 0.5 && ratio < 0.8 ) 
+        else if (ratio >= 0.75 && ratio < 0.9 ) 
             graphics->set_pen(BAR_Y);
         else 
             graphics->set_pen(BAR_R);
