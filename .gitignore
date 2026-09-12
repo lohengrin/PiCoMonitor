@@ -52,4 +52,6 @@ Mkfile.old
 dkms.conf
 
 build/
-pico_display_demo.cpp
+host_script/OpenHardwareMonitor/
+
+**/__pycache__

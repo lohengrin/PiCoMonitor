@@ -1,0 +1,15 @@
+# PiCoMonitor Requirements
+# Core dependencies for system monitoring and serial communication
+
+psutil
+pyserial
+pystray
+Pillow
+
+# For Windows compatibility
+pythonnet; sys_platform == "win32"
+pywin32; sys_platform == "win32"
+
+
+# For development/testing
+argparse

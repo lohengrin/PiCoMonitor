@@ -31,5 +31,5 @@ $ make
 ```
 sudo picotool load -f -x PiCoMonitor.uf2 
 ```
-- When launched, start PiCoMonitor.py on the host to monitor.
+- When launched, start `host_script/PiCoMonitor.py` on the host to monitor.
 
