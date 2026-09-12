@@ -55,3 +55,5 @@ build/
 host_script/OpenHardwareMonitor/
 
 **/__pycache__
+host_script/logs/**
+

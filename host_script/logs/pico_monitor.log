@@ -6427,3 +6427,74 @@
 2026-09-12 17:46:59,268 - __main__ - INFO - Delay set to 1.0s
 2026-09-12 17:47:03,816 - __main__ - INFO - User requested exit
 2026-09-12 17:47:08,816 - __main__ - INFO - Application shutdown initiated
+2026-09-12 17:57:42,136 - __main__ - INFO - Logging system initialized
+2026-09-12 17:57:42,136 - __main__ - INFO - Arguments validation passed
+2026-09-12 17:57:42,169 - __main__ - INFO - Starting PiCoMonitor with delay=0.5s, port=/dev/ttyACM0
+2026-09-12 17:57:42,174 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 17:57:42,174 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 17:57:50,303 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 17:57:50,303 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 17:57:50,303 - __main__ - INFO - Serial port closed successfully
+2026-09-12 17:57:50,303 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 17:57:52,304 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 17:57:52,304 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 17:57:52,304 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 17:57:56,304 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 17:57:56,304 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 17:57:56,304 - __main__ - INFO - Attempting to reconnect in 8 seconds...
+2026-09-12 17:58:04,305 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 17:58:04,306 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 18:05:32,679 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 18:05:32,679 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 18:05:32,679 - __main__ - INFO - Serial port closed successfully
+2026-09-12 18:05:32,679 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 18:05:34,679 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 18:05:34,680 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 18:05:34,680 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 18:05:38,681 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 18:05:38,681 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 18:05:40,501 - __main__ - INFO - User requested exit
+2026-09-12 19:38:16,721 - __main__ - INFO - Logging system initialized
+2026-09-12 19:38:16,721 - __main__ - INFO - Arguments validation passed
+2026-09-12 19:38:16,756 - __main__ - INFO - Starting PiCoMonitor with delay=0.5s, port=/dev/ttyACM0
+2026-09-12 19:38:16,761 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 19:38:16,761 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 19:38:28,290 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:38:28,290 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:38:28,290 - __main__ - INFO - Serial port closed successfully
+2026-09-12 19:38:28,290 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 19:38:30,290 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:30,291 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:30,291 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 19:38:34,291 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 19:38:34,292 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 19:38:46,747 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:38:46,747 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:38:46,747 - __main__ - INFO - Serial port closed successfully
+2026-09-12 19:38:46,747 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 19:38:48,748 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:48,748 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:48,748 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 19:38:52,748 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:52,748 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:38:52,749 - __main__ - INFO - Attempting to reconnect in 8 seconds...
+2026-09-12 19:39:00,749 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 19:39:00,750 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 19:40:17,396 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:40:17,396 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:40:17,396 - __main__ - INFO - Serial port closed successfully
+2026-09-12 19:40:17,396 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 19:40:19,396 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:40:19,396 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:40:19,396 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 19:40:23,397 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 19:40:23,397 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
+2026-09-12 19:40:27,965 - __main__ - ERROR - Serial write failed (port lost?): write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:40:27,965 - __main__ - WARNING - Serial communication error during data send: write failed: [Errno 5] Erreur d'entrée/sortie
+2026-09-12 19:40:27,965 - __main__ - INFO - Serial port closed successfully
+2026-09-12 19:40:27,965 - __main__ - INFO - Attempting to reconnect in 2 seconds...
+2026-09-12 19:40:29,965 - __main__ - ERROR - Failed to open serial port /dev/ttyACM0: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:40:29,966 - __main__ - WARNING - Serial port connection failed: Serial port connection failed: [Errno 2] could not open port /dev/ttyACM0: [Errno 2] Aucun fichier ou dossier de ce nom: '/dev/ttyACM0'
+2026-09-12 19:40:29,966 - __main__ - INFO - Attempting to reconnect in 4 seconds...
+2026-09-12 19:40:33,966 - __main__ - INFO - Connected to serial port: /dev/ttyACM0 at 19200 baud
+2026-09-12 19:40:33,967 - __main__ - INFO - Connected to serial port: /dev/ttyACM0
