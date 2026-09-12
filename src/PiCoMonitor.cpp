@@ -7,10 +7,11 @@
 #include "GraphWidget.h"
 #include "DiskWidget.h"
 
-// Pimodori display RGB led
-#ifdef WITH_PICODISPLAY
-	#include "rgbled.hpp"
-	#include "button.hpp"
+// Platform header selected by CMake
+#ifdef WITH_CROWPANEL
+#include "ScreenCrowPanel.h"
+#else
+#include "ScreenPicoDisplay.h"
 #endif
 
 // PICO SDK
@@ -24,21 +25,28 @@
 #include <string.h>
 
 #define BUFFER_LENGTH 512
-#define LI 25 // Led intensity
-#define DEFAULT_BACKLIGHT 255 // Screen intensity
 
 using namespace pimoroni;
 
 #define PERIOD_US 10000  // 100 Hz
 
-const int64_t DimmingTime = 5000000; // 5 seconds
-const int64_t DimmingSpeed = 10000; // 0.01 seconds
+static const int64_t DimmingTime = 5000000; // 5 seconds
+static const int64_t DimmingSpeed = 10000;  // 0.01 seconds
+
+// Platform factory – single point of hardware selection
+static std::unique_ptr<Screen> createScreen()
+{
+#ifdef WITH_CROWPANEL
+	return std::make_unique<ScreenCrowPanel>();
+#else
+	return std::make_unique<ScreenPicoDisplay>();
+#endif
+}
 
 int main()
 {
 	stdio_init_all();
 
-#if 0
 #ifdef RASPBERRYPI_PICO_W
 	// Init Wifi if using PICO_W (not used yet)
 	if (cyw43_arch_init())
@@ -47,29 +55,8 @@ int main()
 		return -1;
 	}
 #endif
-#endif
 
-#ifdef WITH_CROWPANEL
-	// Reset LCD pin 15 before initializing SPI LCD
-	gpio_init(15);
-	gpio_set_dir(15, GPIO_OUT);
-	gpio_put(15, true);
-	sleep_ms(5);
-	gpio_put(15, false);
-	sleep_ms(20);
-	gpio_put(15, true);
-
-	// Screen initialization
-	Screen screen(320,240, PiCoMonitor::ST7789EX::ELECROW);
-#endif
-#ifdef WITH_PICODISPLAY
-	// Screen initialization
-	Screen screen(pimoroni::PicoDisplay::WIDTH, pimoroni::PicoDisplay::HEIGHT, PiCoMonitor::ST7789EX::PIMORONI);
-#endif
-
-	uint8_t backlight = DEFAULT_BACKLIGHT;
-	screen.set_backlight(backlight);
-	screen.clear();
+	auto screen = createScreen();
 
 	// Create Widgets
 	std::unique_ptr<CPUWidget>  	cpu(new CPUWidget());
@@ -77,36 +64,27 @@ int main()
 	std::unique_ptr<GraphWidget>  	ram(new GraphWidget(100,Color(10,255,10), "RAM"));
 	std::unique_ptr<DiskWidget>  	disks(new DiskWidget());
 
-	screen.addWidget(ram.get(),Screen::UL);
-	screen.addWidget(temp.get(),Screen::UR);
-	screen.addWidget(cpu.get(),Screen::BL);
-	screen.addWidget(disks.get(),Screen::BR);
+	screen->addWidget(ram.get(),Screen::UL);
+	screen->addWidget(temp.get(),Screen::UR);
+	screen->addWidget(cpu.get(),Screen::BL);
+	screen->addWidget(disks.get(),Screen::BR);
 
 	// First draw
-	screen.draw();
-	screen.update();
+	screen->clear();
+	screen->draw();
+	screen->update();
 
 	// Communication buffer
 	char buffer[BUFFER_LENGTH];
 	memset(buffer, 0, BUFFER_LENGTH);
 
-#ifdef WITH_PICODISPLAY
-	// RGB Led control
-	Color ledcolor(0,0,0);
-	RGBLED led(PicoDisplay::LED_R, PicoDisplay::LED_G, PicoDisplay::LED_B);
-	led.set_rgb(ledcolor.r, ledcolor.g, ledcolor.b);
-
-	// Buttons
-	Button button_a(PicoDisplay::A);
-	Button button_b(PicoDisplay::B);
-	Button button_x(PicoDisplay::X);
-	Button button_y(PicoDisplay::Y);
-#endif
-
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
 	absolute_time_t  lastUpdate = get_absolute_time();
 	while (true)
 	{
+		// Platform hooks (button polling, LED feedback...)
+		screen->onFrameBegin();
+
 		// Read next message
 		uint16_t len = get_data(buffer, BUFFER_LENGTH);
 		if (len > 0) // Message is received
@@ -116,14 +94,8 @@ int main()
 			if (!decode_data(buffer, len, data))
 				continue;
 
-#ifdef WITH_PICODISPLAY
-			// LED Color cycling (change color for each valid receive frame)
-			if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(LI,0,0);
-			else if (ledcolor.r == LI && ledcolor.g == 0  && ledcolor.b == 0  ) ledcolor = Color(0,LI,0);
-			else if (ledcolor.r == 0  && ledcolor.g == LI && ledcolor.b == 0  ) ledcolor = Color(0,0,LI);
-			else if (ledcolor.r == 0  && ledcolor.g == 0  && ledcolor.b == LI ) ledcolor = Color(LI,0,0);
-			led.set_rgb(ledcolor.r, ledcolor.g, ledcolor.b);
-#endif
+			// Platform hook (LED color cycling)
+			screen->onDataReceived();
 
 			// Update widget data
 			cpu->setValues(data.cpu_percent);
@@ -135,23 +107,9 @@ int main()
 		}
 
 		// Render
-		screen.clear();
-		screen.draw();
-		screen.update();
-
-#ifdef WITH_PICODISPLAY
-		// Backlight control with A/B buttons
-	    if(button_a.read())
-		{
-			backlight = (backlight <= 255-10)? backlight+10: 255;
-			screen.set_backlight(backlight);
-		}
-	    if(button_b.read())
-		{
-			backlight = (backlight >= 10)? backlight-10: 0;
-			screen.set_backlight(backlight);
-		}
-#endif
+		screen->clear();
+		screen->draw();
+		screen->update();
 
 		// Manage dimming if no data
 		absolute_time_t  now = get_absolute_time();
@@ -159,11 +117,14 @@ int main()
 		if (diff >= DimmingTime)
 		{
 			uint64_t dimDelta = floor((diff-DimmingTime)/DimmingSpeed);
-			if (dimDelta <= backlight)
-				screen.set_backlight(backlight - dimDelta);
+			uint8_t cur = screen->backlight();
+			if (dimDelta <= cur)
+				screen->set_backlight(cur - dimDelta);
 		}
-		else
-			screen.set_backlight(backlight);
+		else if (screen->backlight() != screen->target_backlight())
+		{
+			screen->set_backlight(screen->target_backlight());
+		}
 
 		// Wait next step according to PERIOD_US
 		busy_wait_until(nextStep);

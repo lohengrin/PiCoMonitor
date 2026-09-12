@@ -20,7 +20,7 @@ void Widget::setPosition(const pimoroni::Point& upperLeft, const pimoroni::Point
 }
 
 //--------------------------------------------------------------------------------------------
-void Widget::setGraphics(pimoroni::PicoGraphics_PenRGB565* g)
+void Widget::setGraphics(pimoroni::PicoGraphics* g)
 {
     graphics = g;
 }

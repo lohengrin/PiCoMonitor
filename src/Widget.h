@@ -1,6 +1,5 @@
 #pragma once
 
-#include "pico_display.hpp"
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
 /// @brief Utility to store a color (RGB)
@@ -19,7 +18,7 @@ public:
     //! setPosition: set the widget position
     void setPosition(const pimoroni::Point& upperLeft, const pimoroni::Point& bottomRight);
     //! setGraphics: give the graphics object to widget to draw
-    void setGraphics(pimoroni::PicoGraphics_PenRGB565* g);
+    void setGraphics(pimoroni::PicoGraphics* g);
 
     //! Called when setPosition and setGraphics is done
     virtual void init() = 0;
@@ -31,7 +30,7 @@ public:
     int height() const { return abs(ul.y - br.y); }
 
 protected:
-    pimoroni::PicoGraphics_PenRGB565* graphics;
+    pimoroni::PicoGraphics* graphics;
     pimoroni::Point ul; // Widget's Upper Left position on screen
     pimoroni::Point br; // Widget's Bottom right position on screen
     pimoroni::Point ur; // Widget's Upper Right position on screen

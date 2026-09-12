@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-#Defualt to pico_w
+# Default to pico_w
 if(NOT DEFINED PICO_BOARD)
 	SET(PICO_BOARD pico_w)
 endif()
@@ -21,6 +21,19 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# Board-specific screen implementation (compile only the selected one)
+IF(WITH_PICODISPLAY)
+    set(SCREEN_SRC
+        src/ScreenPicoDisplay.h
+        src/ScreenPicoDisplay.cpp
+    )
+ELSE()
+    set(SCREEN_SRC
+        src/ScreenCrowPanel.h
+        src/ScreenCrowPanel.cpp
+    )
+ENDIF()
+
 # rest of your project
 add_executable(PiCoMonitor
 src/picojson.h
@@ -39,14 +52,19 @@ src/GraphWidget.cpp
 src/DiskWidget.h
 src/DiskWidget.cpp
 src/PiCoMonitor.cpp
+${SCREEN_SRC}
 )
 
 include(common/pimoroni_i2c)
 include(common/pimoroni_bus)
-include(libraries/pico_display/pico_display)
 include(libraries/pico_graphics/pico_graphics)
-include(drivers/rgbled/rgbled)
-include(drivers/button/button)
+include(drivers/st7789/st7789)
+
+IF(WITH_PICODISPLAY)
+    include(libraries/pico_display/pico_display)
+    include(drivers/rgbled/rgbled)
+    include(drivers/button/button)
+ENDIF()
 
 add_subdirectory(st7789Ex)
 
@@ -56,13 +74,13 @@ target_link_libraries(PiCoMonitor
     hardware_spi
     hardware_pwm
     hardware_dma
-    pico_display
     pico_graphics
     st7789Ex
-)
+    )
 
 IF(WITH_PICODISPLAY)
     target_link_libraries(PiCoMonitor 
+        pico_display
         rgbled
         button
     )
@@ -72,9 +90,9 @@ ELSE()
 ENDIF()
 
 IF (${PICO_BOARD} STREQUAL "pico_w")
-target_link_libraries(PiCoMonitor 
-    pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
-)
+    target_link_libraries(PiCoMonitor 
+        pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
+    )
 ENDIF()
 
 pico_enable_stdio_usb(PiCoMonitor 1)
@@ -82,5 +100,3 @@ pico_enable_stdio_uart(PiCoMonitor 0)
 
 # create map/bin/hex/uf2 file in addition to ELF.
 pico_add_extra_outputs(PiCoMonitor)
-
-
