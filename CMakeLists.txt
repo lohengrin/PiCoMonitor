@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.20)
 
 # Default to pico_w
 if(NOT DEFINED PICO_BOARD)
@@ -8,29 +8,30 @@ endif()
 # initialize the SDK based on PICO_SDK_PATH
 # note: this must happen before project()
 include(pico_sdk_import.cmake)
-include(pimoroni_pico_import.cmake)
 
 option(WITH_PICODISPLAY "Build for Pimonori LCD" OFF)
 option(WITH_CROWPANEL   "Build for Elecrow CrowPanel" ON)
 
 project(PiCoMonitor C CXX ASM)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Board-specific screen implementation (compile only the selected one)
+# Board-specific implementation (compile only the selected one). Both boards'
+# display/touch/SD drivers come from the shared third_party/pico-toolset
+# submodule -- see that repo's boards/crowpanel_pico_hmi_28.md.
 IF(WITH_PICODISPLAY)
-    set(SCREEN_SRC
-        src/ScreenPicoDisplay.h
-        src/ScreenPicoDisplay.cpp
+    set(BOARD_SRC
+        src/PicoDisplayBoard.h
+        src/PicoDisplayBoard.cpp
     )
 ELSE()
-    set(SCREEN_SRC
-        src/ScreenCrowPanel.h
-        src/ScreenCrowPanel.cpp
+    set(BOARD_SRC
+        src/CrowPanelBoard.h
+        src/CrowPanelBoard.cpp
     )
 ENDIF()
 
@@ -39,12 +40,6 @@ add_executable(PiCoMonitor
 src/picojson.h
 src/Com.h
 src/Com.cpp
-src/Screen.h
-src/Screen.cpp
-src/Widget.h
-src/Widget.cpp
-src/NullWidget.h
-src/NullWidget.cpp
 src/CPUWidget.h
 src/CPUWidget.cpp
 src/GraphWidget.h
@@ -52,35 +47,42 @@ src/GraphWidget.cpp
 src/DiskWidget.h
 src/DiskWidget.cpp
 src/PiCoMonitor.cpp
-${SCREEN_SRC}
+${BOARD_SRC}
 )
 
-include(common/pimoroni_i2c)
-include(common/pimoroni_bus)
-include(libraries/pico_graphics/pico_graphics)
-include(drivers/st7789/st7789)
+set(PICO_TOOLSET_BUILD_ST7789  ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_XPT2046 ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_SDCARD  ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_SCREEN  ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_SSD1306 OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_ILI9486 OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_PSRAM   OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_USB_HID OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_RESET_BUTTONS OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_DVI_HDMI OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_FAULT_HANDLER OFF CACHE BOOL "" FORCE)
+include(third_party/pico-toolset/cmake/pico_fatfs.cmake)
+add_subdirectory(third_party/pico-toolset)
 
+# Only the Pico Display Pack board needs Pimoroni's RGBLED/Button drivers
+# (its display itself now goes through pico_toolset_st7789, same as CrowPanel).
 IF(WITH_PICODISPLAY)
-    include(libraries/pico_display/pico_display)
+    include(pimoroni_pico_import.cmake)
     include(drivers/rgbled/rgbled)
     include(drivers/button/button)
 ENDIF()
 
-add_subdirectory(st7789Ex)
-
 # Add pico_stdlib library which aggregates commonly used features
-target_link_libraries(PiCoMonitor 
+target_link_libraries(PiCoMonitor
     pico_stdlib
-    hardware_spi
-    hardware_pwm
-    hardware_dma
-    pico_graphics
-    st7789Ex
+    pico_toolset_st7789
+    pico_toolset_xpt2046
+    pico_toolset_sdcard
+    pico_toolset_screen
     )
 
 IF(WITH_PICODISPLAY)
-    target_link_libraries(PiCoMonitor 
-        pico_display
+    target_link_libraries(PiCoMonitor
         rgbled
         button
     )
@@ -90,7 +92,7 @@ ELSE()
 ENDIF()
 
 IF (${PICO_BOARD} STREQUAL "pico_w")
-    target_link_libraries(PiCoMonitor 
+    target_link_libraries(PiCoMonitor
         pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
     )
 ENDIF()

@@ -1,76 +1,42 @@
 #include "DiskWidget.h"
 
-using namespace pimoroni;
+#include "pico_toolset/simple_font.h"
 
-DiskWidget::DiskWidget() : Widget()
-{
-}
+#include <algorithm>
 
-void DiskWidget::init()
-{
-    if (!graphics) return;
+using namespace pico_toolset;
 
-    BAR_G = graphics->create_pen( 32, 180, 96);
-    BAR_Y = graphics->create_pen(230, 126, 34);
-    BAR_R = graphics->create_pen(255,  20, 15);
-    BORDER = graphics->create_pen(0,  50, 100);
-}
+void DiskWidget::draw(DisplayDriver& display) const {
+    Color border = Color::from_rgb888(0, 50, 100);
+    display.draw_line(m_x, m_y, m_x + m_w - 1, m_y, border);
+    display.draw_line(m_x + m_w - 1, m_y, m_x + m_w - 1, m_y + m_h - 1, border);
+    display.draw_line(m_x + m_w - 1, m_y + m_h - 1, m_x, m_y + m_h - 1, border);
+    display.draw_line(m_x, m_y + m_h - 1, m_x, m_y, border);
 
-void DiskWidget::draw()
-{
-    if (!graphics) return;
-
-    // Draw borders
-    graphics->set_pen(BORDER);
-    graphics->line(ul,ur);
-    graphics->line(ur,br);
-    graphics->line(br,bl);
-    graphics->line(bl,ul);
-
-    // If no data, display only title "CPU"
-    if (values.empty())
-    {
-        Point textPosition;
-        textPosition.x = (ul.x+br.x)/2 - 5*8;
-        textPosition.y = (ul.y+br.y)/2;
-        graphics->set_font("sans");
-        graphics->text("Disks", textPosition , 0, 1.0f);
+    if (m_values.empty()) {
+        TextWidget label(m_x + m_w / 2 - 20, m_y + m_h / 2, "Disks", kColorWhite, kColorBlack,
+                          kGlyphFont5x8.glyphs, glyph_font_height);
+        label.draw(display);
         return;
     }
 
-    // Display CPU bars, with color change according to level
-    int spacing = height() / values.size();
-    float maxx = width() - 22 - 3;
+    const int count = static_cast<int>(m_values.size());
+    const int spacing = m_h / count;
+    const int label_w = 22;
+    const int bar_w = std::max(1, m_w - label_w - 3);
 
-    for (size_t i = 0; i < values.size(); ++i)
-    {
-        auto value = values[values.size()-1-i];
-        float ratio = value.used / value.total;
+    for (int i = 0; i < count; ++i) {
+        const auto& d = m_values[static_cast<size_t>(count - 1 - i)];
+        float ratio = d.total > 0 ? static_cast<float>(d.used / d.total) : 0.0f;
+        int y = m_y + m_h - 1 - spacing / 2 - spacing * i;
 
-        graphics->set_pen(BORDER);
-        Point p1(bl.x + 22       , br.y - spacing/2 - spacing*i);
-        Point p2(bl.x + 22 + maxx, br.y - spacing/2 - spacing*i);
-        graphics->thick_line(p1, p2, spacing/2);
+        HBarWidget bar(m_x + label_w, y, bar_w, std::max(1, spacing / 2));
+        bar.set_value(ratio);
+        bar.draw(display);
 
-
-        if (ratio < 0.75) 
-            graphics->set_pen(BAR_G);
-        else if (ratio >= 0.75 && ratio < 0.9 ) 
-            graphics->set_pen(BAR_Y);
-        else 
-            graphics->set_pen(BAR_R);
-
-
-        int sizeval = std::max(1,(int)(maxx * ratio));
-
-        Point p3(bl.x + 22 + sizeval, br.y - spacing/2 - spacing*i);
-        graphics->thick_line(p1, p3, spacing/2);
-
-        Point textPosition;
-        std::string l = value.label.substr(0, 1);
-        textPosition.x = bl.x + 4;
-        textPosition.y = br.y - spacing/2 - spacing*i;
-        graphics->set_font("sans");
-        graphics->text(l, textPosition , 0, (float) height() / 300.0f);
+        char buf[2] = {d.label.empty() ? '?' : d.label[0], 0};
+        TextWidget text(m_x + 4, y - 4, buf, kColorWhite, kColorBlack,
+                         kGlyphFont5x8.glyphs, glyph_font_height);
+        text.draw(display);
     }
 }

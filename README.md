@@ -17,9 +17,13 @@ This script need to be modified to fit your hardware/software configuration.
 # Compilation
 Needs:
 - [pico-sdk](https://github.com/raspberrypi/pico-sdk)
-- [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico)
+- The `third_party/pico-toolset` git submodule (display/touch/SD drivers,
+  shared with this author's other Pico projects): `git submodule update --init`
+- [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico) -- only needed
+  for `-DWITH_PICODISPLAY=ON` (RGB LED + buttons)
 
 ```
+$ git submodule update --init
 $ mkdir build
 $ cd build
 $ cmake -DPICO_BOARD=pico_w ..

@@ -1,17 +1,18 @@
 #include <stdio.h>
 
 #include "Com.h"
-#include "Screen.h"
-#include "NullWidget.h"
 #include "CPUWidget.h"
 #include "GraphWidget.h"
 #include "DiskWidget.h"
+#include "pico_toolset/screen.h"
 
 // Platform header selected by CMake
 #ifdef WITH_CROWPANEL
-#include "ScreenCrowPanel.h"
+#include "CrowPanelBoard.h"
+using Board = CrowPanelBoard;
 #else
-#include "ScreenPicoDisplay.h"
+#include "PicoDisplayBoard.h"
+using Board = PicoDisplayBoard;
 #endif
 
 // PICO SDK
@@ -23,25 +24,16 @@
 
 #include <memory>
 #include <string.h>
+#include <cmath>
 
 #define BUFFER_LENGTH 512
 
-using namespace pimoroni;
+using namespace pico_toolset;
 
 #define PERIOD_US 10000  // 100 Hz
 
 static const int64_t DimmingTime = 5000000; // 5 seconds
 static const int64_t DimmingSpeed = 10000;  // 0.01 seconds
-
-// Platform factory – single point of hardware selection
-static std::unique_ptr<Screen> createScreen()
-{
-#ifdef WITH_CROWPANEL
-	return std::make_unique<ScreenCrowPanel>();
-#else
-	return std::make_unique<ScreenPicoDisplay>();
-#endif
-}
 
 int main()
 {
@@ -56,23 +48,40 @@ int main()
 	}
 #endif
 
-	auto screen = createScreen();
+	Board board;
+	Screen screen(board.driver());
+
+	// Quadrant rects, computed once from the driver's real geometry --
+	// pico_toolset::Screen doesn't auto-position widgets the way the old
+	// local Screen/Widget classes did, so this is done explicitly here.
+	Screen::SlotRect ul = screen.slot_rect(Screen::UL);
+	Screen::SlotRect ur = screen.slot_rect(Screen::UR);
+	Screen::SlotRect bl = screen.slot_rect(Screen::BL);
+	Screen::SlotRect br = screen.slot_rect(Screen::BR);
 
 	// Create Widgets
-	std::unique_ptr<CPUWidget>  	cpu(new CPUWidget());
-	std::unique_ptr<GraphWidget>  	temp(new GraphWidget(100,Color(10,10,255), "°C"));
-	std::unique_ptr<GraphWidget>  	ram(new GraphWidget(100,Color(10,255,10), "RAM"));
-	std::unique_ptr<DiskWidget>  	disks(new DiskWidget());
+	std::unique_ptr<CPUWidget>   cpu(new CPUWidget(bl.x, bl.y, bl.w, bl.h));
+	std::unique_ptr<GraphWidget> temp(new GraphWidget(ur.x, ur.y, ur.w, ur.h, 100,
+	                                                   Color::from_rgb888(10, 10, 255), "\xC2\xB0" "C"));
+	std::unique_ptr<GraphWidget> ram(new GraphWidget(ul.x, ul.y, ul.w, ul.h, 100,
+	                                                  Color::from_rgb888(10, 255, 10), "RAM"));
+	std::unique_ptr<DiskWidget>  disks(new DiskWidget(br.x, br.y, br.w, br.h));
 
-	screen->addWidget(ram.get(),Screen::UL);
-	screen->addWidget(temp.get(),Screen::UR);
-	screen->addWidget(cpu.get(),Screen::BL);
-	screen->addWidget(disks.get(),Screen::BR);
+	screen.set_widget(Screen::UL, ram.get());
+	screen.set_widget(Screen::UR, temp.get());
+	screen.set_widget(Screen::BL, cpu.get());
+	screen.set_widget(Screen::BR, disks.get());
+
+	// Backlight dimming state (was previously tracked inside the old Screen
+	// base class; pico_toolset::Screen only exposes set_backlight(), so this
+	// small state machine lives here instead).
+	uint8_t backlight = 255;
+	uint8_t target_backlight = 255;
+	board.set_backlight(backlight);
 
 	// First draw
-	screen->clear();
-	screen->draw();
-	screen->update();
+	screen.update();
+	board.present();
 
 	// Communication buffer
 	char buffer[BUFFER_LENGTH];
@@ -83,7 +92,7 @@ int main()
 	while (true)
 	{
 		// Platform hooks (button polling, LED feedback...)
-		screen->onFrameBegin();
+		board.poll_buttons(target_backlight);
 
 		// Read next message
 		uint16_t len = get_data(buffer, BUFFER_LENGTH);
@@ -95,7 +104,7 @@ int main()
 				continue;
 
 			// Platform hook (LED color cycling)
-			screen->onDataReceived();
+			board.on_data_received();
 
 			// Update widget data
 			cpu->setValues(data.cpu_percent);
@@ -107,9 +116,8 @@ int main()
 		}
 
 		// Render
-		screen->clear();
-		screen->draw();
-		screen->update();
+		screen.update();
+		board.present();
 
 		// Manage dimming if no data
 		absolute_time_t  now = get_absolute_time();
@@ -117,13 +125,16 @@ int main()
 		if (diff >= DimmingTime)
 		{
 			uint64_t dimDelta = floor((diff-DimmingTime)/DimmingSpeed);
-			uint8_t cur = screen->backlight();
-			if (dimDelta <= cur)
-				screen->set_backlight(cur - dimDelta);
+			if (dimDelta <= backlight)
+			{
+				backlight = backlight - dimDelta;
+				board.set_backlight(backlight);
+			}
 		}
-		else if (screen->backlight() != screen->target_backlight())
+		else if (backlight != target_backlight)
 		{
-			screen->set_backlight(screen->target_backlight());
+			backlight = target_backlight;
+			board.set_backlight(backlight);
 		}
 
 		// Wait next step according to PERIOD_US

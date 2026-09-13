@@ -1,22 +1,23 @@
 #pragma once
 
-#include "Widget.h"
+#include "pico_toolset/widget.h"
 
 #include <vector>
 
-class CPUWidget : public Widget {
+/// @brief Per-core CPU load bars, composed from pico_toolset::BarWidget.
+/// Bar geometry is (re)computed the first time setValues() sees a different
+/// core count than before; each bar's own max-hold decay state then persists
+/// across frames for that core slot.
+class CPUWidget : public pico_toolset::Widget {
 public:
-    CPUWidget();
- 
-    void init();
-    void draw();
+    CPUWidget(int x, int y, int w, int h) : m_x(x), m_y(y), m_w(w), m_h(h) {}
 
-    //! Values as % per code
-    void setValues(std::vector<double>& cpus) {cpuValues = cpus;}
-protected:
-    void setPenScale(double value);
+    //! Values as % per core
+    void setValues(const std::vector<double>& cpus);
 
-    pimoroni::Pen BAR_R, BAR_Y, BAR_G, BORDER;
-    std::vector<double> cpuValues;
-    std::vector<double> cpuValuesMax;
+    void draw(pico_toolset::DisplayDriver& display) const override;
+
+private:
+    int m_x, m_y, m_w, m_h;
+    std::vector<pico_toolset::BarWidget> m_bars;
 };

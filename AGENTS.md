@@ -14,32 +14,38 @@ PiCoMonitor is a PC-monitoring system made of two parts:
 
 Two display boards are supported, selected at **compile time**:
 
-- **Pico Display Pack** (Pimoroni) – 240x135, RGB565, includes an RGB LED and 4
-  buttons. Build with `-DWITH_PICODISPLAY=ON`.
-- **CrowPanel 2.8" HMI** (Elecrow) – 320x240, RGB332, no LED/buttons, requires a
-  manual LCD reset on GPIO15. This is the default (`-DWITH_CROWPANEL=ON`).
+- **Pico Display Pack** (Pimoroni) – 240x135, RGB565, includes an RGB LED and 2
+  buttons used here. Build with `-DWITH_PICODISPLAY=ON`.
+- **CrowPanel 2.8" HMI** (Elecrow) – 320x240, RGB565, XPT2046 touch + uSD card
+  (both sharing SPI1 with the display), requires a manual LCD reset on GPIO15.
+  This is the default (`-DWITH_CROWPANEL=ON`).
+
+Both boards' display/touch/SD drivers and the Screen/Widget composition layer
+come from **`third_party/pico-toolset`**, a git submodule
+([lohengrin/Pico-Toolset](https://github.com/lohengrin/Pico-Toolset)) shared
+with this author's other Pico projects. See that repo's
+`boards/crowpanel_pico_hmi_28.md` for the CrowPanel board's full driver/pin
+documentation. Contribute new reusable drivers/presets back there rather than
+re-forking them locally.
 
 ## Repository layout
 
 ```
-CMakeLists.txt                 Pico firmware build (selects board + screen source)
+CMakeLists.txt                 Pico firmware build (selects board + links pico-toolset components)
 pico_sdk_import.cmake          locates Raspberry Pi Pico SDK (env PICO_SDK_PATH)
-pimoroni_pico_import.cmake     locates Pimoroni Pico libraries (env PIMORONI_PICO_PATH)
+pimoroni_pico_import.cmake     locates Pimoroni Pico libraries (Pico Display Pack's RGBLED/Button only;
+                                env/-D PIMORONI_PICO_PATH)
+third_party/pico-toolset/      git submodule: shared drivers + Screen/Widget composition
+                                (pico_toolset::St7789/Xpt2046Touch/SdCard/Screen/Widget/...)
 src/
     PiCoMonitor.cpp            main loop: serial read, JSON decode, widget render, dimming
     Com.h / Com.cpp            USB serial reading + JSON decoding (picojson)
-    Screen.h / Screen.cpp      abstract Screen base: PicoGraphics buffer, widget slots,
-                               drawing primitives, backlight state + dimming hooks
-    ScreenPicoDisplay.*        Pimoroni Pico Display Pack: ST7789 (PIMORONI) + RGB LED + buttons
-    ScreenCrowPanel.*          Elecrow CrowPanel 2.8": ST7789 (ELECROW) + GPIO15 LCD reset
-    Widget.h / Widget.cpp      abstract base class for all widgets
-    NullWidget.*               placeholder/empty widget
-    CPUWidget.*                per-core CPU bars with max cursor
-    GraphWidget.*              scrolling graph + current value (temp, RAM)
-    DiskWidget.*               disk usage bars
+    CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
+    PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RGB LED + buttons
+    CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
+    GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
+    DiskWidget.*                disk usage bars, composed from pico_toolset::HBarWidget
     picojson.h                 vendored single-header JSON parser (do not modify)
-st7789Ex/                      fork of the Pimoroni ST7789 driver, extended with an
-                               ELECROW variant (320x240 SPI, board-reset handling)
 host_script/
     PiCoMonitor.py             host monitoring daemon (CLI args, tray icon, logging)
     build_exe.py / *.spec      PyInstaller packaging
@@ -54,12 +60,14 @@ images/                        screenshots
 
 ## Build (firmware)
 
-Requirements: `pico-sdk`, `pimoroni-pico` (see README.md). Both are located via
-`PICO_SDK_PATH` / `PIMORONI_PICO_PATH` environment variables, or fetched from git.
+Requirements: `pico-sdk` (env `PICO_SDK_PATH`), and the `third_party/pico-toolset`
+submodule initialized (`git submodule update --init`). `pimoroni-pico` (env/-D
+`PIMORONI_PICO_PATH`) is only needed for `-DWITH_PICODISPLAY=ON`'s RGBLED/Button.
 
 ```
+git submodule update --init
 mkdir build && cd build
-cmake -DPICO_BOARD=pico_w -DWITH_CROWPANEL=ON ..    # or -DWITH_PICODISPLAY=ON
+cmake -DPICO_BOARD=pico_w -DWITH_CROWPANEL=ON ..    # or -DWITH_PICODISPLAY=ON -DPIMORONI_PICO_PATH=...
 make
 ```
 
@@ -107,30 +115,36 @@ The host sends one JSON object per frame (see `host_script/exemple.json`):
 
 ## Conventions
 
-- **C++17, C11** (see `CMakeLists.txt`). Firmware uses the Pico SDK and Pimoroni
-  `pico_graphics`/`pico_display` APIs.
+- **C++20, C11** (see `CMakeLists.txt` -- raised from C++17 to match
+  `third_party/pico-toolset`'s requirement). Firmware uses the Pico SDK and
+  `pico_toolset` APIs; Pimoroni's `rgbled`/`button` are used directly by
+  `PicoDisplayBoard` only (no `pico_graphics`/`pico_display` dependency
+  anymore -- both boards' displays go through `pico_toolset::St7789`).
 - Headers declare APIs with Doxygen-style `//!` comments. Keep that style for
   public API.
-- Widgets derive from `Widget` (abstract `init()` / `draw()`), are positioned via
-  `Screen::Slot` (UL/UR/BL/BR/FS), and draw with a `PicoGraphics` object handed
-  to them by the screen. Widgets are owned on the stack by `PiCoMonitor.cpp` via
-  `std::unique_ptr`, and registered by raw pointer on the `Screen`.
-- Hardware abstraction: `Screen` is an abstract base class owning
-  `std::unique_ptr<PicoGraphics>`. Each board derives from it
-  (`ScreenPicoDisplay`, `ScreenCrowPanel`) and implements `update()` and
-  `apply_backlight()`. Board-specific peripherals live in the subclass and hook
-  into the main loop via `onFrameBegin()` (e.g. buttons adjust backlight) and
-  `onDataReceived()` (e.g. RGB LED cycling). `CMakeLists.txt` compiles only the
-  selected board's screen source, and `PiCoMonitor.cpp` keeps one `#ifdef`
-  confined to the `createScreen()` factory. Keep both board builds working when
-  touching anything platform-related.
-- `set_backlight()`/`set_target_backlight()` track applied vs. user backlight
-  levels; the main loop dims the applied level below the target when no data
-  arrives (5 s timeout).
-- Avoid `using namespace` in headers; `using namespace pimoroni;` is used in `.cpp`
-  files.
-- `st7789Ex` is a local fork of the upstream Pimoroni ST7789 driver. `screen_type`
-  (`PIMORONI` / `ELECROW`) changes init timing and MADCTL configuration. Both
-  boards use this fork via `PiCoMonitor::ST7789EX`.
+- Widgets derive from `pico_toolset::Widget` (`draw(DisplayDriver&) const`),
+  composing pico-toolset primitives (`BarWidget`/`HBarWidget`/
+  `LineGraphWidget`/`TextWidget`). Unlike the old local `Screen`, pico-toolset's
+  `Screen` does **not** auto-position widgets into quadrants -- `PiCoMonitor.cpp`
+  computes each slot's rect via `screen.slot_rect(Screen::UL/...)` and passes
+  explicit pixel coordinates to each widget's constructor. Widgets are owned on
+  the stack by `PiCoMonitor.cpp` via `std::unique_ptr`, and registered by raw
+  pointer via `screen.set_widget(slot, widget)`.
+- Hardware abstraction: no common base class -- `CrowPanelBoard` and
+  `PicoDisplayBoard` are unrelated classes selected by CMake
+  (`WITH_CROWPANEL`/`WITH_PICODISPLAY`) via a `using Board = ...;` alias in
+  `PiCoMonitor.cpp`, both exposing the same duck-typed interface: `driver()`,
+  `set_backlight()`, `poll_buttons(uint8_t& target_backlight)`,
+  `on_data_received()`, `present()`. `CMakeLists.txt` compiles only the
+  selected board's source, and `PiCoMonitor.cpp` keeps its `#ifdef`s confined
+  to the board header include + `using Board = ...`. Keep both board builds
+  working when touching anything platform-related.
+- Backlight dimming (5 s timeout, gradual fade) lives directly in
+  `PiCoMonitor.cpp`'s main loop as two local `uint8_t` variables
+  (`backlight`/`target_backlight`) -- it used to live inside the old `Screen`
+  base class, which pico-toolset's `Screen` doesn't have room for (it only
+  exposes `set_backlight()`).
+- Avoid `using namespace` in headers; `using namespace pico_toolset;` is used
+  in `.cpp` files.
 - The host script is Windows/Linux aware: OpenHardwareMonitor (`.NET`) is used only
   on Windows for GPU temperature; CPU temp is unavailable on Windows.
