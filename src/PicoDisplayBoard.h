@@ -1,7 +1,7 @@
 #pragma once
 
 #include "pico_toolset/st7789.h"
-#include "pico_toolset/st7789_driver.h"
+#include "pico_toolset/buffered_display.h"
 
 #include "rgbled.hpp"
 #include "button.hpp"
@@ -22,7 +22,7 @@ public:
     void poll_buttons(uint8_t& target_backlight);
     //! Cycles the RGB LED through R -> G -> B on each received data frame.
     void on_data_received();
-    //! St7789Driver::flush() already pushes pixels -- nothing extra here.
+    //! BufferedDisplay::flush() already pushes pixels -- nothing extra here.
     void present() {}
 
 private:
@@ -30,7 +30,7 @@ private:
     static constexpr uint8_t kLedIntensity = 25;
 
     pico_toolset::St7789 m_lcd;
-    pico_toolset::St7789Driver m_driver;
+    pico_toolset::BufferedDisplay m_driver;
     pimoroni::RGBLED m_led;
     pimoroni::Button m_button_a;
     pimoroni::Button m_button_b;

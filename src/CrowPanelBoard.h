@@ -1,7 +1,7 @@
 #pragma once
 
 #include "pico_toolset/st7789.h"
-#include "pico_toolset/st7789_driver.h"
+#include "pico_toolset/buffered_display.h"
 #include "pico_toolset/xpt2046.h"
 #include "pico_toolset/sdcard.h"
 
@@ -30,7 +30,7 @@ public:
     void poll_buttons(uint8_t& /*target_backlight*/) {}
     //! No board-specific feedback (e.g. an RGB LED) for this board.
     void on_data_received() {}
-    //! St7789Driver::flush() (called by pico_toolset::Screen::update())
+    //! BufferedDisplay::flush() (called by pico_toolset::Screen::update())
     //! already pushes pixels to the panel -- nothing extra to do here.
     void present() {}
 
@@ -38,7 +38,7 @@ private:
     static uint16_t s_framebuffer[WIDTH * HEIGHT];
 
     pico_toolset::St7789 m_lcd;
-    pico_toolset::St7789Driver m_driver;
+    pico_toolset::BufferedDisplay m_driver;
     pico_toolset::Xpt2046Touch m_touch;
     pico_toolset::SdCard m_sd;
 };
