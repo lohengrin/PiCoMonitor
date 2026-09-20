@@ -57,3 +57,6 @@ host_script/OpenHardwareMonitor/
 **/__pycache__
 host_script/logs/**
 
+
+# Firmware copied by the install_firmware target
+install/
