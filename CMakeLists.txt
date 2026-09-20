@@ -35,8 +35,8 @@ ELSE()
     )
 ENDIF()
 
-# rest of your project
-add_executable(PiCoMonitor
+# Firmware sources, shared by the standalone image and the PicoBoot image
+set(PICOMONITOR_SRC
 src/picojson.h
 src/Com.h
 src/Com.cpp
@@ -49,6 +49,8 @@ src/DiskWidget.cpp
 src/PiCoMonitor.cpp
 ${BOARD_SRC}
 )
+
+add_executable(PiCoMonitor ${PICOMONITOR_SRC})
 
 set(PICO_TOOLSET_BUILD_ST7789  ON  CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_XPT2046 ON  CACHE BOOL "" FORCE)
@@ -72,33 +74,52 @@ IF(WITH_PICODISPLAY)
     include(drivers/button/button)
 ENDIF()
 
-# Add pico_stdlib library which aggregates commonly used features
-target_link_libraries(PiCoMonitor
-    pico_stdlib
-    pico_toolset_st7789
-    pico_toolset_xpt2046
-    pico_toolset_sdcard
-    pico_toolset_screen
-    )
+# Optional second image for the PicoBoot bootloader (a raw .bin linked into
+# its application partition): <name>.picoboot.bin. Needs a PicoBoot checkout,
+# located via -DPICOBOOT_DIR=... (default: sibling ../PicoBoot).
+set(PICOBOOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../PicoBoot" CACHE PATH "PicoBoot checkout")
+set(PICOBOOT_FLASH_SIZE 2097152 CACHE STRING "Total flash size (bytes) of the target board")
+option(WITH_PICOBOOT "Also build PiCoMonitor.picoboot.bin for PicoBoot" ON)
 
-IF(WITH_PICODISPLAY)
-    target_link_libraries(PiCoMonitor
-        rgbled
-        button
-    )
-    target_compile_definitions(PiCoMonitor PRIVATE WITH_PICODISPLAY)
-ELSE()
-    target_compile_definitions(PiCoMonitor PRIVATE WITH_CROWPANEL)
+# Common link libraries, definitions and stdio settings for a firmware target
+function(picomonitor_configure TARGET)
+    target_link_libraries(${TARGET}
+        pico_stdlib
+        pico_toolset_st7789
+        pico_toolset_xpt2046
+        pico_toolset_sdcard
+        pico_toolset_screen
+        )
+
+    IF(WITH_PICODISPLAY)
+        target_link_libraries(${TARGET} rgbled button)
+        target_compile_definitions(${TARGET} PRIVATE WITH_PICODISPLAY)
+    ELSE()
+        target_compile_definitions(${TARGET} PRIVATE WITH_CROWPANEL)
+    ENDIF()
+
+    IF (${PICO_BOARD} STREQUAL "pico_w")
+        # we need Wifi to access the GPIO, but we don't need anything else
+        target_link_libraries(${TARGET} pico_cyw43_arch_none)
+    ENDIF()
+
+    pico_enable_stdio_usb(${TARGET} 1)
+    pico_enable_stdio_uart(${TARGET} 0)
+
+    # create map/bin/hex/uf2 file in addition to ELF.
+    pico_add_extra_outputs(${TARGET})
+endfunction()
+
+picomonitor_configure(PiCoMonitor)
+
+IF(WITH_PICOBOOT)
+    IF(EXISTS ${PICOBOOT_DIR}/cmake/picoboot_app_linker.cmake)
+        add_executable(PiCoMonitor_picoboot ${PICOMONITOR_SRC})
+        set_target_properties(PiCoMonitor_picoboot PROPERTIES OUTPUT_NAME PiCoMonitor.picoboot)
+        include(${PICOBOOT_DIR}/cmake/picoboot_app_linker.cmake)
+        picoboot_set_app_flash_region(PiCoMonitor_picoboot ${PICOBOOT_FLASH_SIZE})
+        picomonitor_configure(PiCoMonitor_picoboot)   # -> PiCoMonitor.picoboot.bin
+    ELSE()
+        message(WARNING "PicoBoot not found at ${PICOBOOT_DIR} (set PICOBOOT_DIR): skipping PiCoMonitor.picoboot.bin")
+    ENDIF()
 ENDIF()
-
-IF (${PICO_BOARD} STREQUAL "pico_w")
-    target_link_libraries(PiCoMonitor
-        pico_cyw43_arch_none     # we need Wifi to access the GPIO, but we don't need anything else
-    )
-ENDIF()
-
-pico_enable_stdio_usb(PiCoMonitor 1)
-pico_enable_stdio_uart(PiCoMonitor 0)
-
-# create map/bin/hex/uf2 file in addition to ELF.
-pico_add_extra_outputs(PiCoMonitor)
