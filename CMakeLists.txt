@@ -50,6 +50,9 @@ src/DiskWidget.h
 src/DiskWidget.cpp
 src/NoSignalWidget.h
 src/NoSignalWidget.cpp
+src/Status.h
+src/Status.cpp
+src/Input.h
 src/PiCoMonitor.cpp
 ${BOARD_SRC}
 )
@@ -64,19 +67,12 @@ set(PICO_TOOLSET_BUILD_SSD1306 OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_ILI9486 OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_PSRAM   OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_USB_HID OFF CACHE BOOL "" FORCE)
-set(PICO_TOOLSET_BUILD_RESET_BUTTONS OFF CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_RESET_BUTTONS ON CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_RGB_LED ON  CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_DVI_HDMI OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FAULT_HANDLER OFF CACHE BOOL "" FORCE)
 include(third_party/pico-toolset/cmake/pico_fatfs.cmake)
 add_subdirectory(third_party/pico-toolset)
-
-# Only the Pico Display Pack board needs Pimoroni's RGBLED/Button drivers
-# (its display itself now goes through pico_toolset_st7789, same as CrowPanel).
-IF(WITH_PICODISPLAY)
-    include(pimoroni_pico_import.cmake)
-    include(drivers/rgbled/rgbled)
-    include(drivers/button/button)
-ENDIF()
 
 # Optional second image for the PicoBoot bootloader (a raw .bin linked into
 # its application partition): <name>.picoboot.bin. Needs a PicoBoot checkout,
@@ -93,10 +89,11 @@ function(picomonitor_configure TARGET)
         pico_toolset_xpt2046
         pico_toolset_sdcard
         pico_toolset_screen
+        pico_toolset_reset_buttons
+        pico_toolset_rgb_led
         )
 
     IF(WITH_PICODISPLAY)
-        target_link_libraries(${TARGET} rgbled button)
         target_compile_definitions(${TARGET} PRIVATE WITH_PICODISPLAY)
     ELSE()
         target_compile_definitions(${TARGET} PRIVATE WITH_CROWPANEL)

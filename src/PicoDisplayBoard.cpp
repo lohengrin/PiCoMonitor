@@ -1,45 +1,56 @@
 #include "PicoDisplayBoard.h"
 
 #include "pico_toolset/st7789_configs.h"
+#include "pico_toolset/reset_buttons_configs.h"
+#include "pico_toolset/rgb_led_configs.h"
+
+#include "pico/stdlib.h"
 
 #include <cstdio>
 
 using namespace pico_toolset;
 
-// Pico Display Pack pin numbers (A=12, B=13, LED_R=6, LED_G=7, LED_B=8) --
-// the same values pico_display.hpp defines, inlined here to avoid pulling
-// in that header (and its PicoGraphics-adjacent includes) for four constants.
 namespace {
-constexpr uint kButtonA = 12;
-constexpr uint kButtonB = 13;
-constexpr uint kLedR = 6;
-constexpr uint kLedG = 7;
-constexpr uint kLedB = 8;
+// Dim glow (same low intensity the LED has always had here)
+constexpr uint8_t kLed = 25;
 } // namespace
 
 uint16_t PicoDisplayBoard::s_framebuffer[WIDTH * HEIGHT];
 
-PicoDisplayBoard::PicoDisplayBoard()
-    : m_driver(m_lcd, s_framebuffer),
-      m_led(kLedR, kLedG, kLedB),
-      m_button_a(kButtonA),
-      m_button_b(kButtonB) {
+PicoDisplayBoard::PicoDisplayBoard() : m_driver(m_lcd, s_framebuffer) {
     if (!m_lcd.init(configs::st7789::kPimoroniPicoDisplayPack))
         printf("ST7789 init FAILED\n");
-    m_led.set_rgb(0, 0, 0);
+    m_led.init(configs::rgb_led::kPimoroniPicoDisplayPack);
+    m_buttons.init(configs::buttons::kPimoroniPicoDisplayPack);
+    update_led(true);
 }
 
-void PicoDisplayBoard::poll_buttons(uint8_t& target_backlight) {
-    if (m_button_a.read())
-        target_backlight = (target_backlight <= 255 - 10) ? target_backlight + 10 : 255;
-    if (m_button_b.read())
-        target_backlight = (target_backlight >= 10) ? target_backlight - 10 : 0;
+uint8_t PicoDisplayBoard::poll_input() {
+    m_buttons.poll();
+    // Button indices follow the corner bit order: A=TL, B=BL, X=TR, Y=BR
+    return m_repeat.update(m_buttons.held_mask(), to_ms_since_boot(get_absolute_time()));
 }
 
-void PicoDisplayBoard::on_data_received() {
-    if (m_led_r == 0 && m_led_g == 0 && m_led_b == 0) { m_led_r = kLedIntensity; m_led_g = 0; m_led_b = 0; }
-    else if (m_led_r == kLedIntensity && m_led_g == 0 && m_led_b == 0) { m_led_r = 0; m_led_g = kLedIntensity; m_led_b = 0; }
-    else if (m_led_r == 0 && m_led_g == kLedIntensity && m_led_b == 0) { m_led_r = 0; m_led_g = 0; m_led_b = kLedIntensity; }
-    else { m_led_r = kLedIntensity; m_led_g = 0; m_led_b = 0; }
-    m_led.set_rgb(m_led_r, m_led_g, m_led_b);
+void PicoDisplayBoard::tick() {
+    update_led(false);
+}
+
+void PicoDisplayBoard::update_led(bool force) {
+    // 0 off, 1 green, 2 orange, 3 red
+    int color = 0;
+    switch (m_status) {
+        case Status::Ok:       color = 1; break;
+        case Status::Warning:  color = 2; break;
+        case Status::Critical: color = 3; break;
+        case Status::NoSignal: color = ((to_ms_since_boot(get_absolute_time()) / 500) % 2) ? 2 : 0; break;
+    }
+    if (!force && color == m_led_state)
+        return;
+    m_led_state = color;
+    switch (color) {
+        case 1:  m_led.set_rgb(0, kLed, 0); break;
+        case 2:  m_led.set_rgb(kLed, kLed / 3, 0); break;
+        case 3:  m_led.set_rgb(kLed, 0, 0); break;
+        default: m_led.set_rgb(0, 0, 0); break;
+    }
 }

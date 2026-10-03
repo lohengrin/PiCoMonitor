@@ -19,8 +19,6 @@ Needs:
 - [pico-sdk](https://github.com/raspberrypi/pico-sdk)
 - The `third_party/pico-toolset` git submodule (display/touch/SD drivers,
   shared with this author's other Pico projects): `git submodule update --init`
-- [pimoroni-pico](https://github.com/pimoroni/pimoroni-pico) -- only needed
-  for `-DWITH_PICODISPLAY=ON` (RGB LED + buttons)
 
 ```
 $ git submodule update --init
@@ -30,7 +28,7 @@ $ cmake -DPICO_BOARD=pico_w ..
 $ make
 ```
 
-Useful options: `-DPICO_BOARD=pico` (plain Pico/RP2040, default `pico_w`),
+Useful options (no other dependency is needed for either board): `-DPICO_BOARD=pico` (plain Pico/RP2040, default `pico_w`),
 `-DWITH_PICODISPLAY=ON -DWITH_CROWPANEL=OFF` (Pimoroni Pico Display Pack instead of the
 default Elecrow CrowPanel).
 

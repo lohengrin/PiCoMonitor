@@ -10,3 +10,9 @@ target_include_directories(test_protocol PRIVATE ../src stub)  # stub/: host sta
 target_compile_options(test_protocol PRIVATE -Wall -Wextra -fsanitize=address,undefined)
 target_link_options(test_protocol PRIVATE -fsanitize=address,undefined)
 add_test(NAME protocol COMMAND test_protocol)
+
+add_executable(test_input_status test_input_status.cpp ../src/Status.cpp ../src/Protocol.cpp)
+target_include_directories(test_input_status PRIVATE ../src stub)
+target_compile_options(test_input_status PRIVATE -Wall -Wextra -fsanitize=address,undefined)
+target_link_options(test_input_status PRIVATE -fsanitize=address,undefined)
+add_test(NAME input_status COMMAND test_input_status)

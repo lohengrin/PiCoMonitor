@@ -5,6 +5,9 @@
 #include "pico_toolset/xpt2046.h"
 #include "pico_toolset/sdcard.h"
 
+#include "Input.h"
+#include "Status.h"
+
 /// @brief Elecrow CrowPanel PICO HMI 2.8": ST7789 SPI display + XPT2046
 /// touch + uSD card, all sharing SPI1 with separate CS lines. See
 /// third_party/pico-toolset/boards/crowpanel_pico_hmi_28.md.
@@ -26,10 +29,12 @@ public:
     pico_toolset::Xpt2046Touch& touch() { return m_touch; }
     pico_toolset::SdCard& sd() { return m_sd; }
 
-    //! No board-specific per-frame polling for this board.
-    void poll_buttons(uint8_t& /*target_backlight*/) {}
-    //! No board-specific feedback (e.g. an RGB LED) for this board.
-    void on_data_received() {}
+    //! Corners fired this call (see Input.h). Touch corner zones are not wired
+    //! up yet (they need a measured touch calibration for this panel).
+    uint8_t poll_input() { return 0; }
+    //! This board has no status LED.
+    void set_status(Status) {}
+    void tick() {}
     //! BufferedDisplay::flush() (called by pico_toolset::Screen::update())
     //! already pushes pixels to the panel -- nothing extra to do here.
     void present() {}

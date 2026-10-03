@@ -33,8 +33,6 @@ re-forking them locally.
 ```
 CMakeLists.txt                 Pico firmware build (selects board + links pico-toolset components)
 pico_sdk_import.cmake          locates Raspberry Pi Pico SDK (env PICO_SDK_PATH)
-pimoroni_pico_import.cmake     locates Pimoroni Pico libraries (Pico Display Pack's RGBLED/Button only;
-                                env/-D PIMORONI_PICO_PATH)
 third_party/pico-toolset/      git submodule: shared drivers + Screen/Widget composition
                                 (pico_toolset::St7789/Xpt2046Touch/SdCard/Screen/Widget/...)
 src/
@@ -43,8 +41,10 @@ src/
                                (incremental frame reassembly), decode_data() (picojson, type-safe)
     Com.h / Com.cpp            poll_frame(): non-blocking USB serial read -> FrameAssembler -> decode
 tests/                         host-side unit tests for the protocol layer (cmake -S tests ...)
+    Input.h                    Corner enum + RepeatFilter (press + auto-repeat), pure C++, host-tested
+    Status.h / Status.cpp      computeStatus(): worst-of Ok/Warning/Critical from a frame, pure C++, host-tested
     CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
-    PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RGB LED + buttons
+    PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RgbLed + DebouncedButtons
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
     GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
     DiskWidget.*               disk usage bars (pico_toolset::HBarWidget) with the full label drawn inside
@@ -67,13 +67,13 @@ images/                        screenshots
 ## Build (firmware)
 
 Requirements: `pico-sdk` (env `PICO_SDK_PATH`), and the `third_party/pico-toolset`
-submodule initialized (`git submodule update --init`). `pimoroni-pico` (env/-D
-`PIMORONI_PICO_PATH`) is only needed for `-DWITH_PICODISPLAY=ON`'s RGBLED/Button.
+submodule initialized (`git submodule update --init`). Nothing else: the Pimoroni
+libraries are no longer used.
 
 ```
 git submodule update --init
 mkdir build && cd build
-cmake -DPICO_BOARD=pico_w -DWITH_CROWPANEL=ON ..    # or -DWITH_PICODISPLAY=ON -DPIMORONI_PICO_PATH=...
+cmake -DPICO_BOARD=pico_w -DWITH_CROWPANEL=ON ..    # or -DWITH_PICODISPLAY=ON
 make
 ```
 
@@ -157,9 +157,8 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
 
 - **C++20, C11** (see `CMakeLists.txt` -- raised from C++17 to match
   `third_party/pico-toolset`'s requirement). Firmware uses the Pico SDK and
-  `pico_toolset` APIs; Pimoroni's `rgbled`/`button` are used directly by
-  `PicoDisplayBoard` only (no `pico_graphics`/`pico_display` dependency
-  anymore -- both boards' displays go through `pico_toolset::St7789`).
+  `pico_toolset` APIs only (display `St7789`, `RgbLed`, `DebouncedButtons`,
+  `Xpt2046Touch`, `SdCard`); there is no Pimoroni dependency anymore.
 - Headers declare APIs with Doxygen-style `//!` comments. Keep that style for
   public API.
 - Widgets derive from `pico_toolset::Widget` (`draw(DisplayDriver&) const`),
@@ -174,11 +173,23 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   `PicoDisplayBoard` are unrelated classes selected by CMake
   (`WITH_CROWPANEL`/`WITH_PICODISPLAY`) via a `using Board = ...;` alias in
   `PiCoMonitor.cpp`, both exposing the same duck-typed interface: `driver()`,
-  `set_backlight()`, `poll_buttons(uint8_t& target_backlight)`,
-  `on_data_received()`, `present()`. `CMakeLists.txt` compiles only the
-  selected board's source, and `PiCoMonitor.cpp` keeps its `#ifdef`s confined
-  to the board header include + `using Board = ...`. Keep both board builds
-  working when touching anything platform-related.
+  `set_backlight()`, `poll_input()`, `set_status()`, `tick()`, `present()`.
+  `CMakeLists.txt` compiles only the selected board's source, and
+  `PiCoMonitor.cpp` keeps its `#ifdef`s confined to the board header include +
+  `using Board = ...`. Keep both board builds working when touching anything
+  platform-related.
+- Input is the same on both boards: four logical **corners** (`Input.h`).
+  `Board::poll_input()` returns the corners that fired this call (press +
+  auto-repeat via `RepeatFilter`); `PiCoMonitor.cpp` maps them to actions in one
+  place: top-left = backlight up, bottom-left = backlight down; top-right /
+  bottom-right are reserved for page switching. Pico Display Pack: buttons
+  A/B/X/Y are TL/BL/TR/BR. CrowPanel: touch corner zones (not implemented yet:
+  needs a measured touch calibration for this panel, see the board doc in
+  pico-toolset).
+- Status: `computeStatus()` (`Status.h`) turns each frame into Ok/Warning/
+  Critical (average CPU 70/90 %, RAM 80/95 %, temperature 70/85 degrees, any
+  disk 90/97 %); the Pico Display Pack's RGB LED shows it (green/orange/red,
+  orange blinking = NO SIGNAL). The CrowPanel has no LED and ignores it.
 - The main loop re-renders **only when something changed** (`dirty` flag): a new
   frame, a CPU max marker still falling (`CPUWidget::tick()` returns true while
   moving), or the NO SIGNAL banner toggling. The loop itself still ticks at

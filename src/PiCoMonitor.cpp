@@ -5,6 +5,7 @@
 #include "GraphWidget.h"
 #include "DiskWidget.h"
 #include "NoSignalWidget.h"
+#include "Status.h"
 #include "pico_toolset/screen.h"
 
 // Platform header selected by CMake
@@ -89,20 +90,25 @@ int main()
 	// max marker still falling, the NO SIGNAL banner toggling).
 	bool dirty = true;
 	bool hadData = false;
+	Status dataStatus = Status::Ok;
 
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
 	absolute_time_t  lastUpdate = get_absolute_time();
 	while (true)
 	{
-		// Platform hooks (button polling, LED feedback...)
-		board.poll_buttons(target_backlight);
+		// Corner inputs (buttons / touch zones): top-left brighter, bottom-left
+		// dimmer; the right-hand corners are reserved for page switching
+		const uint8_t corners = board.poll_input();
+		if (corners & CornerTopLeft)
+			target_backlight = (target_backlight <= 255 - 10) ? target_backlight + 10 : 255;
+		if (corners & CornerBottomLeft)
+			target_backlight = (target_backlight >= 10) ? target_backlight - 10 : 0;
 
 		// Poll the serial input; a complete valid frame updates the widgets
 		MonitorData data;
 		if (poll_frame(data))
 		{
-			// Platform hook (LED color cycling)
-			board.on_data_received();
+			dataStatus = computeStatus(data);
 
 			// Update widget data
 			cpu->setValues(data.cpu_percent);
@@ -128,6 +134,8 @@ int main()
 			noSignal->set_visible(signalLost);
 			dirty = true;
 		}
+		board.set_status(signalLost ? Status::NoSignal : dataStatus);
+		board.tick();
 
 		// Falling CPU max markers keep the screen animating
 		if (cpu->tick())
