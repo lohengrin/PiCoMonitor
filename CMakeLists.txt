@@ -122,7 +122,8 @@ function(picomonitor_configure TARGET)
 
     target_compile_definitions(${TARGET} PRIVATE
         PICOMONITOR_FLASH_SIZE=${PICOMONITOR_FLASH_SIZE}
-        PICOMONITOR_SETTINGS_SECTORS=${PICOMONITOR_SETTINGS_SECTORS})
+        PICOMONITOR_SETTINGS_SECTORS=${PICOMONITOR_SETTINGS_SECTORS}
+        PICO_STACK_SIZE=0x1000)   # 4 KiB (default 2 KiB): the display line buffer and the flash save path are big
 
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)

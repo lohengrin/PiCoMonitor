@@ -194,6 +194,10 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   page and show the page name via `OverlayWidget::show_toast`. To add a page: add its widgets and
   a `kCount` entry in `Pages`, gate it with a `m_seen_*` flag set in `update()`, add it to
   `apply()`, and add the host metric as an optional `Metric` in `host_script/PiCoMonitor.py`.
+- **Stack**: core 0 has 4 KiB (`PICO_STACK_SIZE=0x1000`, same as PicoBoot; the 2 KiB default overflowed
+  once the flash-save path was added on top of `main()`'s frame). Keep big objects off the stack: the
+  `Board` is `static` (its display line buffer alone is ~1 KB), `FlashStore` builds records in a member
+  buffer. After adding locals to `main()`, re-check its frame (`sub sp` in `objdump -d`, now ~420 bytes).
 - Settings persist in the **last 2 flash sectors** (`PICOMONITOR_SETTINGS_SECTORS`,
   pico_toolset `FlashStore`, CRC'd append-only records, erase only every 16 saves). `CMakeLists.txt`
   shortens the firmware's FLASH region by that reserve (standalone: generated

@@ -54,7 +54,9 @@ int main()
 	}
 #endif
 
-	Board board;
+	// static: the board owns large buffers (display line buffer, framebuffer
+	// pointers...) that must not live on main()'s small stack
+	static Board board;
 	Screen screen(board.driver());
 
 	// All pages and their widgets (see Pages.h); the Overview is shown first
