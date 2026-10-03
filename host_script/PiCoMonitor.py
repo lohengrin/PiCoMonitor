@@ -10,6 +10,7 @@ import sys
 import argparse
 import re
 import threading
+import glob
 from types import SimpleNamespace
 try:
     import pystray
@@ -26,6 +27,14 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 
 from PIL import Image, ImageDraw
+
+
+# Optional NVIDIA GPU support (pure-python wrapper; the NVIDIA driver library is
+# only needed at runtime, so this import succeeds on any machine)
+try:
+    import pynvml
+except Exception:
+    pynvml = None
 
 
 def find_ohm_dll() -> Optional[str]:
@@ -433,6 +442,43 @@ class SystemMonitor:
             return None
     
     @staticmethod
+    def get_cpu_frequency() -> Optional[float]:
+        """Current CPU frequency in MHz (None where psutil cannot tell, e.g. some VMs)"""
+        try:
+            f = psutil.cpu_freq()
+            return _round(f.current, 0) if f and f.current else None
+        except Exception as e:
+            logger.debug(f"CPU frequency unavailable: {e}")
+            return None
+
+    @staticmethod
+    def get_load_average() -> Optional[List[float]]:
+        """1/5/15 minute load average (psutil emulates it on Windows)"""
+        try:
+            return [round(x, 2) for x in psutil.getloadavg()]
+        except Exception as e:
+            logger.debug(f"Load average unavailable: {e}")
+            return None
+
+    @staticmethod
+    def get_swap_usage() -> Optional[float]:
+        """Swap / page file usage in percent"""
+        try:
+            return _round(psutil.swap_memory().percent)
+        except Exception as e:
+            logger.debug(f"Swap usage unavailable: {e}")
+            return None
+
+    @staticmethod
+    def get_uptime() -> Optional[int]:
+        """Seconds since boot"""
+        try:
+            return max(0, int(time.time() - psutil.boot_time()))
+        except Exception as e:
+            logger.debug(f"Uptime unavailable: {e}")
+            return None
+
+    @staticmethod
     def get_memory_usage() -> Optional[float]:
         """Get memory usage percentage"""
         try:
@@ -443,6 +489,129 @@ class SystemMonitor:
             return None
 
 # Remove old functions as they're now in SystemMonitor class
+
+def _round(value: Optional[float], digits: int = 1) -> Optional[float]:
+    return None if value is None else round(float(value), digits)
+
+
+class RateTracker:
+    """Per-second rates from psutil's cumulative network / disk I/O counters.
+    The first call has no previous sample and returns None."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._prev: Dict[str, Tuple[float, Tuple[int, int]]] = {}
+
+    def _rate(self, key: str, counters: Optional[Tuple[int, int]]) -> Optional[List[float]]:
+        if counters is None:
+            return None
+        now = self._clock()
+        prev = self._prev.get(key)
+        self._prev[key] = (now, counters)
+        if prev is None or now <= prev[0]:
+            return None
+        dt = now - prev[0]
+        # KB/s; a counter reset / wrap (negative delta) counts as 0
+        return [_round(max(0, c - p) / dt / 1000.0) for c, p in zip(counters, prev[1])]
+
+    def network(self) -> Optional[List[float]]:
+        """[download, upload] in KB/s over all interfaces"""
+        try:
+            n = psutil.net_io_counters()
+            return self._rate('net', (n.bytes_recv, n.bytes_sent)) if n else None
+        except Exception as e:
+            logger.debug(f"Network counters unavailable: {e}")
+            return None
+
+    def disk_io(self) -> Optional[List[float]]:
+        """[read, write] in KB/s over all disks"""
+        try:
+            d = psutil.disk_io_counters()
+            return self._rate('io', (d.read_bytes, d.write_bytes)) if d else None
+        except Exception as e:
+            logger.debug(f"Disk I/O counters unavailable: {e}")
+            return None
+
+
+class GpuMonitor:
+    """Optional GPU metrics, first provider that works wins: NVIDIA via NVML
+    (Windows/Linux, needs the NVIDIA driver) or AMD via sysfs (Linux amdgpu).
+    read() returns None where there is no supported GPU (e.g. Raspberry Pi)."""
+
+    def __init__(self):
+        self._provider: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
+        self._probed = False
+        self._nvml_handle = None
+
+    def read(self) -> Optional[Dict[str, Any]]:
+        if not self._probed:
+            self._probed = True
+            self._provider = self._probe()
+        if self._provider is None:
+            return None
+        try:
+            return self._provider()
+        except Exception as e:
+            logger.debug(f"GPU read failed: {e}")
+            return None
+
+    def _probe(self):
+        if pynvml is not None:
+            try:
+                pynvml.nvmlInit()
+                if pynvml.nvmlDeviceGetCount() > 0:
+                    self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                    logger.info("GPU monitoring: NVIDIA (NVML)")
+                    return self._read_nvidia
+            except Exception as e:
+                logger.debug(f"NVML unavailable: {e}")
+        if sys.platform.startswith("linux"):
+            for card in sorted(glob.glob("/sys/class/drm/card[0-9]*/device")):
+                if os.path.exists(os.path.join(card, "gpu_busy_percent")):
+                    self._amd_dir = card
+                    logger.info(f"GPU monitoring: AMD (sysfs {card})")
+                    return self._read_amd
+        logger.info("GPU monitoring: no supported GPU found")
+        return None
+
+    def _read_nvidia(self) -> Dict[str, Any]:
+        h = self._nvml_handle
+        name = pynvml.nvmlDeviceGetName(h)
+        if isinstance(name, bytes):
+            name = name.decode(errors="replace")
+        util = pynvml.nvmlDeviceGetUtilizationRates(h)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+        temp = pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU)
+        return {"n": name[:24], "l": float(util.gpu), "t": float(temp),
+                "mu": int(mem.used // (1024 * 1024)), "mt": int(mem.total // (1024 * 1024))}
+
+    @staticmethod
+    def _read_int(path: str) -> Optional[int]:
+        try:
+            with open(path) as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return None
+
+    def _read_amd(self) -> Dict[str, Any]:
+        d = self._amd_dir
+        load = self._read_int(os.path.join(d, "gpu_busy_percent"))
+        used = self._read_int(os.path.join(d, "mem_info_vram_used"))
+        total = self._read_int(os.path.join(d, "mem_info_vram_total"))
+        temp = None
+        for hw in glob.glob(os.path.join(d, "hwmon", "hwmon*", "temp1_input")):
+            t = self._read_int(hw)
+            if t is not None:
+                temp = t / 1000.0
+                break
+        out: Dict[str, Any] = {"n": "AMD GPU"}
+        if load is not None: out["l"] = float(load)
+        if temp is not None: out["t"] = float(temp)
+        if used is not None and total:
+            out["mu"] = used // (1024 * 1024)
+            out["mt"] = total // (1024 * 1024)
+        return out
+
 
 class SystemTrayIcon:
     """Class to manage system tray icon and menu"""
@@ -516,6 +685,7 @@ class Metric:
     key: str
     collect: Callable[['DataCollector'], Any]
     fallback: Any = None
+    optional: bool = False   # omitted from the frame when unavailable (None) instead of sent as null
 
 
 def default_metrics() -> List[Metric]:
@@ -525,6 +695,15 @@ def default_metrics() -> List[Metric]:
         Metric('TEMP', lambda dc: SystemMonitor.get_cpu_temperature(), None),
         Metric('RAM', lambda dc: SystemMonitor.get_memory_usage(), None),
         Metric('DISKS', lambda dc: SystemMonitor.get_disk_usage(), []),
+        # Optional extras, shown on the firmware's extra pages. Anything the
+        # platform cannot provide is simply left out of the frame.
+        Metric('NET', lambda dc: dc.rates.network(), optional=True),     # [down, up] KB/s
+        Metric('IO', lambda dc: dc.rates.disk_io(), optional=True),      # [read, write] KB/s
+        Metric('FREQ', lambda dc: SystemMonitor.get_cpu_frequency(), optional=True),   # MHz
+        Metric('LOAD', lambda dc: SystemMonitor.get_load_average(), optional=True),    # [1, 5, 15 min]
+        Metric('SWAP', lambda dc: SystemMonitor.get_swap_usage(), optional=True),      # %
+        Metric('UP', lambda dc: SystemMonitor.get_uptime(), optional=True),            # seconds
+        Metric('GPU', lambda dc: dc.gpu.read(), optional=True),
     ]
 
 
@@ -538,6 +717,8 @@ class DataCollector:
         self.contflag = True
         self.serial_manager = None
         self.metrics = metrics if metrics is not None else default_metrics()
+        self.rates = RateTracker()
+        self.gpu = GpuMonitor()
         self._wake = threading.Event()
     
     def collect_system_data(self) -> Dict[str, Any]:
@@ -545,10 +726,13 @@ class DataCollector:
         data = {}
         for metric in self.metrics:
             try:
-                data[metric.key] = metric.collect(self)
+                value = metric.collect(self)
             except Exception as e:
                 logger.error(f"Metric {metric.key} failed: {e}")
-                data[metric.key] = metric.fallback
+                value = metric.fallback
+            if value is None and metric.optional:
+                continue
+            data[metric.key] = value
         return data
     
     def send_data_via_serial(self, data: Dict[str, Any], serial_conn: serial.Serial):

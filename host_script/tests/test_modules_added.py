@@ -24,7 +24,8 @@ class TestMetrics:
         assert dc.collect_system_data() == {'A': 1, 'B': -1, 'C': [2]}
 
     def test_default_metrics_keys(self):
-        assert [m.key for m in DataCollector('COM5', 0.5).metrics] == ['CPU', 'TEMP', 'RAM', 'DISKS']
+        assert [m.key for m in DataCollector('COM5', 0.5).metrics] == ['CPU', 'TEMP', 'RAM', 'DISKS', 'NET', 'IO', 'FREQ',
+                                                                    'LOAD', 'SWAP', 'UP', 'GPU']
 
     def test_metric_gets_collector_delay(self):
         seen = []

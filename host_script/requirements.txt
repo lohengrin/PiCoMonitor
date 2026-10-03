@@ -13,3 +13,6 @@ pywin32; sys_platform == "win32"
 
 # For development/testing
 argparse
+
+# Optional: NVIDIA GPU metrics (pure-python NVML wrapper; needs the NVIDIA driver at runtime)
+nvidia-ml-py
