@@ -47,7 +47,10 @@ tests/                         host-side unit tests for the protocol layer (cmak
     PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RGB LED + buttons
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
     GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
-    DiskWidget.*                disk usage bars, composed from pico_toolset::HBarWidget
+    DiskWidget.*               disk usage bars (pico_toolset::HBarWidget) with the full label drawn inside
+                               each bar in literally inverted colors (TextWidget::set_invert, which reads
+                               the pixel under each glyph via DisplayDriver::read_pixel); pages rotate
+                               every 4 s when the disks do not all fit (tick())
     NoSignalWidget.*           "NO SIGNAL" overlay banner (Screen::FS slot, drawn last)
     picojson.h                 vendored single-header JSON parser (do not modify)
 host_script/

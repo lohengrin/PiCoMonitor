@@ -3,8 +3,49 @@
 #include "pico_toolset/simple_font.h"
 
 #include <algorithm>
+#include <string>
 
 using namespace pico_toolset;
+
+int DiskWidget::rowsPerPage() const {
+    return std::max(1, (m_h - 2) / kMinRow);
+}
+
+int DiskWidget::pageCount() const {
+    const int n = static_cast<int>(m_values.size());
+    const int rpp = rowsPerPage();
+    return std::max(1, (n + rpp - 1) / rpp);
+}
+
+void DiskWidget::setValues(const std::vector<MonitorData::DiskData>& disks) {
+    m_values = disks;
+    if (m_page >= pageCount())
+        m_page = 0;
+}
+
+bool DiskWidget::tick() {
+    if (pageCount() <= 1) {
+        m_frames = 0;
+        return false;
+    }
+    if (++m_frames < kFramesPerPage)
+        return false;
+    m_frames = 0;
+    m_page = (m_page + 1) % pageCount();
+    return true;
+}
+
+// Shortens `label` (ASCII) with ".." until it is at most max_px wide at this
+// scale; the font is fixed-width (5 px glyph + 1 px spacing).
+static std::string fit_label(const std::string& label, int max_px, int scale) {
+    const int char_px = 6 * scale;
+    const int max_chars = std::max(1, (max_px + scale) / char_px);
+    if (static_cast<int>(label.size()) <= max_chars)
+        return label;
+    if (max_chars <= 2)
+        return label.substr(0, max_chars);
+    return label.substr(0, max_chars - 2) + "..";
+}
 
 void DiskWidget::draw(DisplayDriver& display) const {
     Color border = Color::from_rgb888(0, 50, 100);
@@ -22,26 +63,31 @@ void DiskWidget::draw(DisplayDriver& display) const {
         return;
     }
 
-    const int count = static_cast<int>(m_values.size());
-    const int spacing = m_h / count;
-    const int label_w = 22;
-    const int bar_w = std::max(1, m_w - label_w - 3);
+    const int n = static_cast<int>(m_values.size());
+    const int rpp = rowsPerPage();
+    const int first = m_page * rpp;
+    const int rows = std::min(rpp, n - first);
 
-    for (int i = 0; i < count; ++i) {
-        const auto& d = m_values[static_cast<size_t>(count - 1 - i)];
-        float ratio = d.total > 0 ? static_cast<float>(d.used / d.total) : 0.0f;
-        int y = m_y + m_h - 1 - spacing / 2 - spacing * i;
+    const int spacing = (m_h - 2) / rows;          // row pitch
+    const int thickness = std::max(8, spacing - 2); // bar height (>= text height)
+    const int scale = thickness >= 18 ? 2 : 1;
+    const int bar_x = m_x + 2;
+    const int bar_w = m_w - 4;
 
-        HBarWidget bar(m_x + label_w, y, bar_w, std::max(1, spacing / 2));
+    for (int j = 0; j < rows; ++j) {
+        const auto& d = m_values[static_cast<size_t>(first + j)];
+        const float ratio = d.total > 0 ? static_cast<float>(d.used / d.total) : 0.0f;
+
+        // Row centered in its slot; HBarWidget draws centered on y
+        const int cy = m_y + 1 + j * spacing + spacing / 2;
+        HBarWidget bar(bar_x, cy, bar_w, thickness);
         bar.set_value(ratio);
         bar.draw(display);
 
-        char buf[2] = {d.label.empty() ? '?' : d.label[0], 0};
-        const uint8_t scale = spacing >= 20 ? 2 : 1;
-        TextWidget text(0, 0, buf, bar.color(), kColorBlack,
-                         kGlyphFont5x8.glyphs, glyph_font_height, scale);
-        text.set_transparent(true);
-        text.set_centered(m_x + label_w / 2, y);
-        text.draw(display);
+        const std::string text = fit_label(d.label.empty() ? "?" : d.label, bar_w - 6, scale);
+        TextWidget label(bar_x + 3, cy - (8 * scale) / 2, text.c_str(), kColorWhite, kColorBlack,
+                          kGlyphFont5x8.glyphs, glyph_font_height, scale);
+        label.set_invert(true);
+        label.draw(display);
     }
 }

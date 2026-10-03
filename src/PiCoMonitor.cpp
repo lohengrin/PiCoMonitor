@@ -133,6 +133,10 @@ int main()
 		if (cpu->tick())
 			dirty = true;
 
+		// Disk pages rotate when not all disks fit
+		if (disks->tick())
+			dirty = true;
+
 		// Render only on change
 		if (dirty)
 		{
