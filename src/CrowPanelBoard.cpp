@@ -25,7 +25,7 @@ CrowPanelBoard::CrowPanelBoard() : m_driver(m_lcd, s_framebuffer) {
         printf("SD mount failed (FRESULT=%d)\n", m_sd.last_mount_result());
 }
 
-uint8_t CrowPanelBoard::poll_input() {
+InputEvents CrowPanelBoard::poll_input() {
     // A corner counts once the same one has been seen on kDebouncePolls
     // consecutive polls (a resistive panel gives spurious samples at touch-down)
     constexpr int kDebouncePolls = 3;
@@ -38,5 +38,7 @@ uint8_t CrowPanelBoard::poll_input() {
     m_zone_frames = (zone != 0 && zone == m_zone) ? m_zone_frames + 1 : 1;
     m_zone = zone;
     const uint8_t held = (zone != 0 && m_zone_frames >= kDebouncePolls) ? zone : 0;
-    return m_repeat.update(held, to_ms_since_boot(get_absolute_time()));
+    InputEvents ev;
+    ev.fired = m_repeat.update(held, to_ms_since_boot(get_absolute_time()), &ev.pressed);
+    return ev;
 }

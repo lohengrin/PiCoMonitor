@@ -57,6 +57,38 @@ static bool number(const picojson::value& v, double& out)
     return true;
 }
 
+// Reads `count` numbers from an array into out[]; false if it is not an array
+// of at least `count` numbers.
+static bool numbers(const picojson::value& v, double* out, size_t count)
+{
+    if (!v.is<picojson::array>()) return false;
+    const auto& arr = v.get<picojson::array>();
+    if (arr.size() < count) return false;
+    for (size_t i = 0; i < count; ++i)
+        if (!number(arr[i], out[i])) return false;
+    return true;
+}
+
+static void decode_gpu(const picojson::object& obj, MonitorData::Gpu& gpu)
+{
+    for (const auto& kv : obj)
+    {
+        const std::string& k = kv.first;
+        const picojson::value& v = kv.second;
+        if (k == "n" && v.is<std::string>())
+            gpu.name = v.get<std::string>().substr(0, MonitorData::kMaxGpuName);
+        else if (k == "l")
+            gpu.has_load = number(v, gpu.load);
+        else if (k == "t")
+            gpu.has_temp = number(v, gpu.temp);
+        else if (k == "mu")
+            number(v, gpu.vram_used_mb);
+        else if (k == "mt")
+            number(v, gpu.vram_total_mb);
+    }
+    gpu.has_vram = gpu.vram_total_mb > 0.0;
+}
+
 bool decode_data(const char* json, size_t len, MonitorData& data)
 {
     picojson::value v;
@@ -87,6 +119,38 @@ bool decode_data(const char* json, size_t len, MonitorData& data)
         else if (key == "RAM")
         {
             data.has_ram = number(val, data.ram);
+        }
+        else if (key == "NET")
+        {
+            double v[2];
+            if (numbers(val, v, 2)) { data.has_net = true; data.net_down = v[0]; data.net_up = v[1]; }
+        }
+        else if (key == "IO")
+        {
+            double v[2];
+            if (numbers(val, v, 2)) { data.has_io = true; data.io_read = v[0]; data.io_write = v[1]; }
+        }
+        else if (key == "FREQ")
+        {
+            data.has_freq = number(val, data.freq_mhz);
+        }
+        else if (key == "LOAD")
+        {
+            data.has_load = numbers(val, data.load_avg, 3);
+        }
+        else if (key == "SWAP")
+        {
+            data.has_swap = number(val, data.swap);
+        }
+        else if (key == "UP")
+        {
+            double up;
+            if (number(val, up) && up >= 0 && up < 4294967295.0) { data.has_uptime = true; data.uptime_s = static_cast<uint32_t>(up); }
+        }
+        else if (key == "GPU" && val.is<picojson::object>())
+        {
+            data.has_gpu = true;
+            decode_gpu(val.get<picojson::object>(), data.gpu);
         }
         else if (key == "DISKS" && val.is<picojson::array>())
         {

@@ -45,12 +45,16 @@ tests/                         host-side unit tests for the protocol layer (cmak
     Status.h / Status.cpp      computeStatus(): worst-of Ok/Warning/Critical from a frame, pure C++, host-tested
     CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
     PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RgbLed + DebouncedButtons
+    Pages.h / Pages.cpp        page manager: Overview / Network / System / GPU, owns all widgets, switches the
+                               Screen's slots; extra pages become available when the host first sends their data
+                               (pure widget logic, host-tested)
+    InfoListWidget.*           "label ... value" rows (System page, GPU info)
+    OverlayWidget.*            full-screen overlay (Screen::FS slot, drawn last): NO SIGNAL banner + page-name toast
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
     GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
     DiskWidget.*               disk usage bars (pico_toolset::HBarWidget) with the full label drawn inside
                                each bar in black; pages rotate
                                every 4 s when the disks do not all fit (tick())
-    NoSignalWidget.*           "NO SIGNAL" overlay banner (Screen::FS slot, drawn last)
     picojson.h                 vendored single-header JSON parser (do not modify)
 host_script/
     PiCoMonitor.py             host monitoring daemon (CLI args, tray icon, logging)
@@ -145,6 +149,11 @@ The host sends one JSON object per frame (see `host_script/exemple.json`):
 }
 ```
 
+Optional extra keys (omitted by the host when the platform cannot provide them; every one has a
+`has_*` flag in `MonitorData`): `NET` `[down, up]` KB/s, `IO` `[read, write]` KB/s, `FREQ` MHz, `LOAD`
+`[1, 5, 15]`, `SWAP` %, `UP` seconds, `GPU` `{"n": name, "l": load %, "t": temp, "mu": VRAM used MB,
+"mt": VRAM total MB}`. A full frame is ~450 bytes; the firmware's frame buffer is 2048.
+
 `src/Com.cpp` polls the USB serial input (`stdio_usb`, 19200 baud, ignored by
 USB CDC) without blocking and feeds `FrameAssembler` (`src/Protocol.h`), which
 tolerates any chunking, garbage between frames and braces inside strings, and
@@ -178,11 +187,16 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   `PiCoMonitor.cpp` keeps its `#ifdef`s confined to the board header include +
   `using Board = ...`. Keep both board builds working when touching anything
   platform-related.
+- Pages (`Pages.h`): `PiCoMonitor.cpp` calls `pages.update(data)` per frame and
+  `pages.tick()` per loop; top-right / bottom-right (press only, `InputEvents::pressed`) switch
+  page and show the page name via `OverlayWidget::show_toast`. To add a page: add its widgets and
+  a `kCount` entry in `Pages`, gate it with a `m_seen_*` flag set in `update()`, add it to
+  `apply()`, and add the host metric as an optional `Metric` in `host_script/PiCoMonitor.py`.
 - Input is the same on both boards: four logical **corners** (`Input.h`).
   `Board::poll_input()` returns the corners that fired this call (press +
   auto-repeat via `RepeatFilter`); `PiCoMonitor.cpp` maps them to actions in one
-  place: top-left = backlight up, bottom-left = backlight down; top-right /
-  bottom-right are reserved for page switching. Pico Display Pack: buttons
+  place: top-left = backlight up, bottom-left = backlight down (both repeat while
+  held), top-right / bottom-right = previous / next page. Pico Display Pack: buttons
   A/B/X/Y are TL/BL/TR/BR. CrowPanel: touching the outer third of both axes in a
   screen corner (`corner_at()`), using the toolset's CrowPanel touch
   calibration (`kElecrowCrowPanelPicoHmi28Calibration`).

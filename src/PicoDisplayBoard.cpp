@@ -25,10 +25,12 @@ PicoDisplayBoard::PicoDisplayBoard() : m_driver(m_lcd, s_framebuffer) {
     update_led(true);
 }
 
-uint8_t PicoDisplayBoard::poll_input() {
+InputEvents PicoDisplayBoard::poll_input() {
     m_buttons.poll();
     // Button indices follow the corner bit order: A=TL, B=BL, X=TR, Y=BR
-    return m_repeat.update(m_buttons.held_mask(), to_ms_since_boot(get_absolute_time()));
+    InputEvents ev;
+    ev.fired = m_repeat.update(m_buttons.held_mask(), to_ms_since_boot(get_absolute_time()), &ev.pressed);
+    return ev;
 }
 
 void PicoDisplayBoard::tick() {

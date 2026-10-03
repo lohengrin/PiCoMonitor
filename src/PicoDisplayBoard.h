@@ -21,8 +21,8 @@ public:
 
     void set_backlight(uint8_t val) { m_lcd.set_backlight(val); }
 
-    //! Corners fired this call (press + auto-repeat), see Input.h. Call once per loop.
-    uint8_t poll_input();
+    //! Input events of this call (see Input.h). Call once per loop.
+    InputEvents poll_input();
     //! Status shown on the RGB LED (NoSignal blinks)
     void set_status(Status s) { m_status = s; }
     //! Call once per loop: drives the LED blink

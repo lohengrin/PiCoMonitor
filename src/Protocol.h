@@ -21,6 +21,7 @@ struct MonitorData {
     //! Limits applied while decoding (extra entries are ignored)
     static constexpr size_t kMaxCores = 64;
     static constexpr size_t kMaxDisks = 8;
+    static constexpr size_t kMaxGpuName = 24;
 
     //! By core CPU usage (%)
     std::vector<double> cpu_percent;
@@ -33,6 +34,31 @@ struct MonitorData {
     //! False when the key is absent, null, or not a number in the frame
     bool has_ram = false;
     bool has_temp = false;
+
+    // Optional extras (shown on the extra pages); each has_* is false when the
+    // host did not send it (platform cannot provide it, or first sample).
+    bool   has_net = false;      //! network throughput, KB/s
+    double net_down = 0.0, net_up = 0.0;
+    bool   has_io = false;       //! disk throughput, KB/s
+    double io_read = 0.0, io_write = 0.0;
+    bool   has_freq = false;     //! CPU frequency, MHz
+    double freq_mhz = 0.0;
+    bool   has_load = false;     //! load average over 1/5/15 minutes
+    double load_avg[3] = {0.0, 0.0, 0.0};
+    bool   has_swap = false;     //! swap usage, %
+    double swap = 0.0;
+    bool   has_uptime = false;   //! seconds since boot
+    uint32_t uptime_s = 0;
+
+    /// @brief GPU (NVIDIA / AMD), absent on e.g. a Raspberry Pi
+    struct Gpu {
+        std::string name;
+        bool has_load = false;  double load = 0.0;      //! %
+        bool has_temp = false;  double temp = 0.0;      //! degrees
+        bool has_vram = false;  double vram_used_mb = 0.0, vram_total_mb = 0.0;
+    };
+    bool has_gpu = false;
+    Gpu  gpu;
 };
 
 /// @brief Incremental frame reassembler: feed it bytes as they arrive, it

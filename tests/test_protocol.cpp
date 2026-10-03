@@ -59,6 +59,45 @@ static void test_assembler() {
       CHECK(rx.frames == 0); }
 }
 
+static const char* kFullSample =
+    R"({"CPU": [0.0, 2.0], "TEMP": 48.9, "RAM": 34.0, "DISKS": [{"path": "/", "total": 982.83, "used": 517.9}], )"
+    R"("NET": [1.6, 3.6], "IO": [3091.6, 464.5], "FREQ": 3078.0, "LOAD": [1.77, 1.38, 1.14], "SWAP": 98.5, )"
+    R"("UP": 335821, "GPU": {"n": "Quadro P4000", "l": 0.0, "t": 38.0, "mu": 6717, "mt": 8192}})";
+
+static void test_extras() {
+    bool ok;
+    MonitorData d = decode(kFullSample, &ok);
+    CHECK(ok);
+    CHECK(d.has_net && d.net_down == 1.6 && d.net_up == 3.6);
+    CHECK(d.has_io && d.io_read == 3091.6 && d.io_write == 464.5);
+    CHECK(d.has_freq && d.freq_mhz == 3078.0);
+    CHECK(d.has_load && d.load_avg[0] == 1.77 && d.load_avg[2] == 1.14);
+    CHECK(d.has_swap && d.swap == 98.5);
+    CHECK(d.has_uptime && d.uptime_s == 335821);
+    CHECK(d.has_gpu && d.gpu.name == "Quadro P4000" && d.gpu.has_load && d.gpu.has_temp);
+    CHECK(d.gpu.has_vram && d.gpu.vram_used_mb == 6717 && d.gpu.vram_total_mb == 8192);
+
+    // an old host sends none of them: everything stays absent
+    d = decode(kSample, &ok);
+    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && !d.has_gpu);
+
+    // odd shapes are ignored, never fatal
+    d = decode(R"({"NET":[1],"IO":"x","FREQ":null,"LOAD":[1,2],"SWAP":[1],"UP":-5,"GPU":5})", &ok);
+    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && !d.has_gpu);
+    d = decode(R"({"NET":[1,"a"],"LOAD":[1,2,"x"],"UP":1e30})", &ok);
+    CHECK(ok && !d.has_net && !d.has_load && !d.has_uptime);
+    // GPU with partial / missing fields (e.g. AMD without temperature)
+    d = decode(R"({"GPU":{"n":"AMD GPU","l":42}})", &ok);
+    CHECK(ok && d.has_gpu && d.gpu.has_load && !d.gpu.has_temp && !d.gpu.has_vram);
+    d = decode(R"({"GPU":{}})", &ok);
+    CHECK(ok && d.has_gpu && d.gpu.name.empty() && !d.gpu.has_load);
+    // GPU name is capped
+    d = decode(R"({"GPU":{"n":"0123456789012345678901234567890123456789"}})", &ok);
+    CHECK(ok && d.gpu.name.size() == MonitorData::kMaxGpuName);
+    // a full frame fits the firmware's frame buffer comfortably
+    CHECK(strlen(kFullSample) < 1024);
+}
+
 static void test_decode() {
     bool ok;
     MonitorData d = decode(kSample, &ok);
@@ -94,6 +133,7 @@ static void test_decode() {
 int main() {
     test_assembler();
     test_decode();
+    test_extras();
     if (failures) { printf("%d failure(s)\n", failures); return 1; }
     printf("all protocol tests passed\n");
     return 0;

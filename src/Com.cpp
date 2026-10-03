@@ -4,7 +4,7 @@
 
 namespace {
 
-constexpr size_t kFrameBufferSize = 1024;
+constexpr size_t kFrameBufferSize = 2048;
 //! A frame is written by the host in one go: if bytes stop arriving this long
 //! mid-frame, the rest was lost -- drop it and resynchronise.
 constexpr int64_t kFrameTimeoutUs = 200000;

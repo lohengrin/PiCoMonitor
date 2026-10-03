@@ -48,8 +48,12 @@ src/GraphWidget.h
 src/GraphWidget.cpp
 src/DiskWidget.h
 src/DiskWidget.cpp
-src/NoSignalWidget.h
-src/NoSignalWidget.cpp
+src/InfoListWidget.h
+src/InfoListWidget.cpp
+src/OverlayWidget.h
+src/OverlayWidget.cpp
+src/Pages.h
+src/Pages.cpp
 src/Status.h
 src/Status.cpp
 src/Input.h

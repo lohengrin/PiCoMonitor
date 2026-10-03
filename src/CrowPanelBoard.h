@@ -28,9 +28,9 @@ public:
     pico_toolset::Xpt2046Touch& touch() { return m_touch; }
     pico_toolset::SdCard& sd() { return m_sd; }
 
-    //! Corners fired this call (see Input.h): touching the outer third of both
-    //! axes in a screen corner, with press + auto-repeat. Call once per loop.
-    uint8_t poll_input();
+    //! Input events of this call (see Input.h): touching the outer third of both
+    //! axes in a screen corner. Call once per loop.
+    InputEvents poll_input();
     //! This board has no status LED.
     void set_status(Status) {}
     void tick() {}

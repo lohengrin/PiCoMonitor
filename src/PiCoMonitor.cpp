@@ -1,10 +1,8 @@
 #include <stdio.h>
 
 #include "Com.h"
-#include "CPUWidget.h"
-#include "GraphWidget.h"
-#include "DiskWidget.h"
-#include "NoSignalWidget.h"
+#include "OverlayWidget.h"
+#include "Pages.h"
 #include "Status.h"
 #include "pico_toolset/screen.h"
 
@@ -37,6 +35,8 @@ static const int64_t DimmingSpeed = 10000;  // 0.01 seconds
 //! Without a valid frame for this long (after data was received at least once)
 //! the "NO SIGNAL" banner is shown. Keep above the host's send period.
 static const int64_t NoSignalTime = 3000000; // 3 seconds
+//! How long the page name stays on screen after a page switch (100 frames/s)
+static const int PageToastFrames = 150;
 
 int main()
 {
@@ -54,30 +54,13 @@ int main()
 	Board board;
 	Screen screen(board.driver());
 
-	// Quadrant rects, computed once from the driver's real geometry --
-	// pico_toolset::Screen doesn't auto-position widgets the way the old
-	// local Screen/Widget classes did, so this is done explicitly here.
-	Screen::SlotRect ul = screen.slot_rect(Screen::UL);
-	Screen::SlotRect ur = screen.slot_rect(Screen::UR);
-	Screen::SlotRect bl = screen.slot_rect(Screen::BL);
-	Screen::SlotRect br = screen.slot_rect(Screen::BR);
+	// All pages and their widgets (see Pages.h); the Overview is shown first
+	Pages pages(screen);
 
-	// Create Widgets
-	std::unique_ptr<CPUWidget>   cpu(new CPUWidget(bl.x, bl.y, bl.w, bl.h));
-	std::unique_ptr<GraphWidget> temp(new GraphWidget(ur.x, ur.y, ur.w, ur.h, 100,
-	                                                   Color::from_rgb888(10, 10, 255), "\xC2\xB0" "C"));
-	std::unique_ptr<GraphWidget> ram(new GraphWidget(ul.x, ul.y, ul.w, ul.h, 100,
-	                                                  Color::from_rgb888(10, 255, 10), "RAM"));
-	std::unique_ptr<DiskWidget>  disks(new DiskWidget(br.x, br.y, br.w, br.h));
-
-	screen.set_widget(Screen::UL, ram.get());
-	screen.set_widget(Screen::UR, temp.get());
-	screen.set_widget(Screen::BL, cpu.get());
-	screen.set_widget(Screen::BR, disks.get());
-
-	// Full-screen slot is drawn last: used for the "NO SIGNAL" overlay
-	std::unique_ptr<NoSignalWidget> noSignal(new NoSignalWidget(screen.driver().width(), screen.driver().height()));
-	screen.set_widget(Screen::FS, noSignal.get());
+	// Full-screen slot is drawn last: used for the overlay ("NO SIGNAL" banner,
+	// page-name toast)
+	std::unique_ptr<OverlayWidget> overlay(new OverlayWidget(screen.driver().width(), screen.driver().height()));
+	screen.set_widget(Screen::FS, overlay.get());
 
 	// Backlight dimming state (was previously tracked inside the old Screen
 	// base class; pico_toolset::Screen only exposes set_backlight(), so this
@@ -97,12 +80,22 @@ int main()
 	while (true)
 	{
 		// Corner inputs (buttons / touch zones): top-left brighter, bottom-left
-		// dimmer; the right-hand corners are reserved for page switching
-		const uint8_t corners = board.poll_input();
-		if (corners & CornerTopLeft)
+		// dimmer (with auto-repeat); top-right / bottom-right = previous / next
+		// page (press only, no repeat)
+		const InputEvents input = board.poll_input();
+		if (input.fired & CornerTopLeft)
 			target_backlight = (target_backlight <= 255 - 10) ? target_backlight + 10 : 255;
-		if (corners & CornerBottomLeft)
+		if (input.fired & CornerBottomLeft)
 			target_backlight = (target_backlight >= 10) ? target_backlight - 10 : 0;
+		if (input.pressed & (CornerTopRight | CornerBottomRight))
+		{
+			if (input.pressed & CornerTopRight)
+				pages.prev();
+			else
+				pages.next();
+			overlay->show_toast(pages.toast(), PageToastFrames);
+			dirty = true;
+		}
 
 		// Poll the serial input; a complete valid frame updates the widgets
 		MonitorData data;
@@ -110,13 +103,8 @@ int main()
 		{
 			dataStatus = computeStatus(data);
 
-			// Update widget data
-			cpu->setValues(data.cpu_percent);
-			if (data.has_temp)
-				temp->pushValue(data.temp);
-			disks->setValues(data.disks);
-			if (data.has_ram)
-				ram->pushValue(data.ram);
+			// Update widget data (all pages)
+			pages.update(data);
 
 			lastUpdate = get_absolute_time();
 			hadData = true;
@@ -129,20 +117,19 @@ int main()
 		// Signal lost (only after having received data: at boot the widgets'
 		// own placeholder labels are shown instead)
 		const bool signalLost = hadData && diff >= NoSignalTime;
-		if (signalLost != noSignal->visible())
+		if (signalLost != overlay->no_signal())
 		{
-			noSignal->set_visible(signalLost);
+			overlay->set_no_signal(signalLost);
 			dirty = true;
 		}
 		board.set_status(signalLost ? Status::NoSignal : dataStatus);
 		board.tick();
 
-		// Falling CPU max markers keep the screen animating
-		if (cpu->tick())
+		// Animations of the visible page (falling CPU max markers, rotating disk
+		// pages) and the page-name toast timing out keep the screen redrawing
+		if (pages.tick())
 			dirty = true;
-
-		// Disk pages rotate when not all disks fit
-		if (disks->tick())
+		if (overlay->tick())
 			dirty = true;
 
 		// Render only on change

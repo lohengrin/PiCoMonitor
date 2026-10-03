@@ -60,6 +60,30 @@ install/PiCoMonitor-picodisplay-pico_w-Release.uf2
 ...
 ```
 
+# Pages and controls
+The display has up to four pages; the extra ones appear automatically the first time the host sends the
+matching data (an older host script, or a machine without e.g. a GPU, simply never shows them):
+
+| Page | Content |
+|------|---------|
+| Overview | RAM and temperature graphs, per-core CPU bars, disk usage bars |
+| Network | download / upload and disk read / write throughput graphs (auto-scaled) |
+| System | CPU frequency, core count, load average, swap, uptime |
+| GPU | GPU load, temperature, VRAM graphs and name (NVIDIA anywhere with the driver, AMD on Linux) |
+
+Both boards use the same four corner controls:
+
+| Corner | Action |
+|--------|--------|
+| top-left | backlight up (hold to repeat) |
+| bottom-left | backlight down (hold to repeat) |
+| top-right | previous page |
+| bottom-right | next page |
+
+On the Pimoroni Pico Display these are the buttons A (top-left), B (bottom-left), X (top-right), Y (bottom-right);
+on the CrowPanel touch the outer third of the screen in that corner. The page name is shown briefly after a switch.
+The Pico Display's RGB LED shows the overall status (green / orange / red; orange blinking = no signal).
+
 # Host script
 `host_script/PiCoMonitor.py` finds the Pico by itself (USB id), on Windows, Ubuntu and Raspberry Pi OS:
 ```

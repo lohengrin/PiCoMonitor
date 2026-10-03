@@ -72,9 +72,19 @@ void DiskWidget::draw(DisplayDriver& display) const {
 
     const int spacing = (m_h - 2) / rows;          // row pitch
     const int thickness = std::max(8, spacing - 2); // bar height (>= text height)
-    const int scale = thickness >= 18 ? 2 : 1;
     const int bar_x = m_x + 2;
     const int bar_w = m_w - 4;
+
+    // 2x text only if there is room for it AND the longest "LABEL [XX%]" of this
+    // page fits at that size (otherwise 1x for all rows, so nothing is cut short)
+    int scale = thickness >= 18 ? 2 : 1;
+    if (scale == 2) {
+        for (int j = 0; j < rows; ++j) {
+            const auto& d = m_values[static_cast<size_t>(first + j)];
+            const int chars = static_cast<int>(std::max<size_t>(1, d.label.size())) + 7; // " [100%]"
+            if (chars * 12 - 2 > bar_w - 6) { scale = 1; break; }
+        }
+    }
 
     for (int j = 0; j < rows; ++j) {
         const auto& d = m_values[static_cast<size_t>(first + j)];

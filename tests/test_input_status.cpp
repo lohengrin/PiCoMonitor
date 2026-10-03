@@ -39,6 +39,21 @@ static void test_repeat() {
       CHECK(r.update(CornerTopLeft, t + 0x150) == CornerTopLeft); }
 }
 
+static void test_pressed_edges() {
+    RepeatFilter r; uint8_t pressed = 0xFF;
+    CHECK(r.update(CornerTopRight, 0, &pressed) == CornerTopRight && pressed == CornerTopRight);
+    // a held corner repeats as "fired" but is never "pressed" again
+    CHECK(r.update(CornerTopRight, 201, &pressed) == CornerTopRight && pressed == 0);
+    CHECK(r.update(CornerTopRight, 500, &pressed) == CornerTopRight && pressed == 0);
+    CHECK(r.update(0, 600, &pressed) == 0 && pressed == 0);
+    CHECK(r.update(CornerTopRight, 610, &pressed) == CornerTopRight && pressed == CornerTopRight);
+    // two corners pressed at once are both reported
+    RepeatFilter r2;
+    r2.update(0, 0, &pressed);
+    CHECK(r2.update(CornerBottomLeft | CornerBottomRight, 10, &pressed) == (CornerBottomLeft | CornerBottomRight));
+    CHECK(pressed == (CornerBottomLeft | CornerBottomRight));
+}
+
 static void test_corners() {
     const int W = 320, H = 240;
     CHECK(corner_at(0, 0, W, H) == CornerTopLeft);
@@ -83,6 +98,7 @@ static void test_status() {
 int main() {
     test_repeat();
     test_corners();
+    test_pressed_edges();
     test_status();
     if (failures) { printf("%d failure(s)\n", failures); return 1; }
     printf("all input/status tests passed\n");

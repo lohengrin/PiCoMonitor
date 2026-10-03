@@ -19,6 +19,13 @@ public:
     //! Values as % per code
     void pushValue(double val) { m_graph.push_value(val); }
 
+    using ValueFormatter = pico_toolset::LineGraphWidget::ValueFormatter;
+
+    //! See pico_toolset::LineGraphWidget
+    void setAutoScale(double min_scale) { m_graph.set_autoscale(min_scale); }
+    void setTitle(const char* title) { m_graph.set_title(title); }
+    void setFormatter(pico_toolset::LineGraphWidget::ValueFormatter f) { m_graph.set_value_formatter(f); }
+
     void draw(pico_toolset::DisplayDriver& display) const override;
 
 private:

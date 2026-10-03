@@ -16,6 +16,12 @@ enum Corner : uint8_t {
     CornerBottomRight = 1 << 3,
 };
 
+/// @brief What a board's input produced during one poll
+struct InputEvents {
+    uint8_t fired = 0;    //! corners to act on: presses plus auto-repeats (e.g. backlight)
+    uint8_t pressed = 0;  //! corners just pressed, no repeats (e.g. page switching)
+};
+
 /// @brief Corner zone containing a pixel position (touch boards): each corner
 /// is the outer third of both axes; the rest of the screen is no corner.
 /// @return the Corner bit, or 0
@@ -41,10 +47,13 @@ public:
     static constexpr uint32_t kRepeatMs = 200;
     static constexpr uint32_t kHoldMs = 1000;
 
-    //! @param held   mask of corners currently held down
-    //! @param now_ms monotonic milliseconds
-    //! @return mask of corners that fire on this call
-    uint8_t update(uint8_t held, uint32_t now_ms) {
+    //! @param held    mask of corners currently held down
+    //! @param now_ms  monotonic milliseconds
+    //! @param pressed if given, receives the corners that were *just* pressed
+    //!                (no auto-repeats): for actions that must not repeat
+    //! @return mask of corners that fire on this call (presses + repeats)
+    uint8_t update(uint8_t held, uint32_t now_ms, uint8_t* pressed = nullptr) {
+        if (pressed) *pressed = 0;
         uint8_t fired = 0;
         for (int i = 0; i < 4; ++i) {
             const uint8_t bit = static_cast<uint8_t>(1u << i);
@@ -56,6 +65,7 @@ public:
                 m_down |= bit;
                 m_pressed_ms[i] = m_last_ms[i] = now_ms;
                 fired |= bit;
+                if (pressed) *pressed |= bit;
                 continue;
             }
             uint32_t rate = kRepeatMs;
