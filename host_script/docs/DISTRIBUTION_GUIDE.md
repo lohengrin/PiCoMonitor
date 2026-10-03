@@ -99,7 +99,7 @@ To verify the build works:
 - The EXE includes all Python dependencies (psutil, pystray, Pillow, etc.)
 - OpenHardwareMonitor DLLs are bundled for GPU temperature monitoring
 - The application runs as a system tray icon with no console window
-- Default serial port: COM5 (Windows) or /dev/ttyACM0 (Linux)
+- Default serial port: auto-detected (the Pico's USB serial port); override with `-p`
 - Default data collection interval: 0.5 seconds
 
 ## Future Improvements

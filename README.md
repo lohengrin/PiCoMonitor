@@ -62,6 +62,18 @@ install/PiCoMonitor-picodisplay-pico_w-Release.uf2
 ...
 ```
 
+# Host script
+`host_script/PiCoMonitor.py` finds the Pico by itself (USB id), on Windows, Ubuntu and Raspberry Pi OS:
+```
+$ python host_script/PiCoMonitor.py                # auto-detect the port
+$ python host_script/PiCoMonitor.py --list-ports   # show serial ports / what was detected
+$ python host_script/PiCoMonitor.py -p COM3        # or /dev/ttyACM0: force a port
+$ python host_script/PiCoMonitor.py --no-tray      # headless (servers, Raspberry Pi OS Lite)
+```
+On Linux your user needs access to the serial device: `sudo usermod -aG dialout $USER` (log in again).
+CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi); on Windows it needs
+OpenHardwareMonitor (`host_script/OpenHardwareMonitor/` or `PICOMONITOR_OHM_DLL`).
+
 # Installation
 - Copy uf2 file to the pico or use picotool: 
 ```

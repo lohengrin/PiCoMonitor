@@ -5,28 +5,60 @@ import psutil
 import json
 import time
 import serial
+import serial.tools.list_ports
 import sys
 import argparse
-import pystray
-if sys.platform == "win32":
-    import clr  # the pythonnet module (Windows only)
+import re
+import threading
+from types import SimpleNamespace
+try:
+    import pystray
+    from pystray import Menu, MenuItem
+except Exception:  # no GUI/tray backend (headless Linux, e.g. Raspberry Pi OS Lite)
+    pystray = None
+    Menu = MenuItem = None
 import logging
 import logging.handlers
 import os
 import signal
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Callable, Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from contextlib import contextmanager
 
 from PIL import Image, ImageDraw
-from pystray import Menu, MenuItem
 
-# OpenHardwareMonitor is Windows-only (.NET)
+
+def find_ohm_dll() -> Optional[str]:
+    """Locate OpenHardwareMonitorLib.dll (Windows only): $PICOMONITOR_OHM_DLL,
+    then OpenHardwareMonitor/ next to the script (or inside the PyInstaller bundle)."""
+    candidates = []
+    env = os.environ.get("PICOMONITOR_OHM_DLL")
+    if env:
+        candidates.append(env)
+    for base in (getattr(sys, "_MEIPASS", None), os.path.dirname(os.path.abspath(__file__))):
+        if base:
+            candidates.append(os.path.join(base, "OpenHardwareMonitor", "OpenHardwareMonitorLib.dll"))
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+# OpenHardwareMonitor is Windows-only (.NET); optional: without it (or without
+# pythonnet) the GPU temperature is simply unavailable.
+Computer = None
 if sys.platform == "win32":
-    clr.AddReference(r'E:\users\Apps\PicoMonitor\OpenHardwareMonitor\OpenHardwareMonitorLib')
-    from OpenHardwareMonitor.Hardware import Computer
-else:
-    Computer = None
+    try:
+        import clr  # the pythonnet module (Windows only)
+        _ohm_dll = find_ohm_dll()
+        if _ohm_dll is None:
+            raise FileNotFoundError("OpenHardwareMonitorLib.dll not found "
+                                    "(set PICOMONITOR_OHM_DLL or put it in host_script/OpenHardwareMonitor/)")
+        clr.AddReference(_ohm_dll)
+        from OpenHardwareMonitor.Hardware import Computer
+    except Exception as _e:
+        Computer = None
+        print(f"OpenHardwareMonitor unavailable, no GPU temperature: {_e}", file=sys.stderr)
 
 # Configuration constants
 @dataclass
@@ -40,6 +72,12 @@ class Config:
     LOG_BACKUP_COUNT: int = 3
 
 config = Config()
+
+# USB identification (Raspberry Pi VID; pico-sdk's stdio_usb CDC default PID)
+PICO_VID = 0x2E8A
+PICO_CDC_PIDS = (0x000A,)
+PICO_BOOTSEL_PIDS = (0x0003, 0x000F)   # ROM bootloader: mass storage only, no serial
+APP_PRODUCT = "PiCoMonitor"            # preferred if the firmware ever reports it
 
 # Error classes
 class HardwareMonitorError(Exception):
@@ -75,6 +113,10 @@ class SerialPortManager:
             return self.serial_connection
         except (serial.SerialException, OSError, PermissionError) as e:
             logger.error(f'Failed to open serial port {self.port}: {e}')
+            if isinstance(e, PermissionError) or 'Permission denied' in str(e):
+                if sys.platform.startswith("linux"):
+                    logger.error("Permission denied: add your user to the 'dialout' group "
+                                 "(sudo usermod -aG dialout $USER, then log in again) or use a udev rule")
             raise SerialCommunicationError(f'Serial port connection failed: {e}')
     
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -86,6 +128,59 @@ class SerialPortManager:
             except Exception as e:
                 logger.error(f"Error closing serial port: {e}")
         self.serial_connection = None
+
+def _natural_key(text: str):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', text)]
+
+
+class PortDetector:
+    """Find the Pico's USB serial port (COMx on Windows, /dev/ttyACMx on Linux)"""
+
+    @staticmethod
+    def candidates() -> List[Tuple[int, str, str]]:
+        """Candidate ports as (rank, device, description), best first.
+        Rank 0: product name is PiCoMonitor; 1: Pico CDC id; 2: other Raspberry Pi
+        serial device. ROM-bootloader ids (no serial) are excluded."""
+        found = []
+        for p in serial.tools.list_ports.comports():
+            if p.vid != PICO_VID or p.pid in PICO_BOOTSEL_PIDS:
+                continue
+            if APP_PRODUCT.lower() in (p.product or "").lower():
+                rank = 0
+            elif p.pid in PICO_CDC_PIDS:
+                rank = 1
+            else:
+                rank = 2
+            found.append((rank, p.device, p.description or ""))
+        found.sort(key=lambda c: (c[0], _natural_key(c[1])))
+        return found
+
+    @staticmethod
+    def find() -> Optional[str]:
+        """Best candidate port, or None"""
+        try:
+            cands = PortDetector.candidates()
+        except Exception as e:
+            logger.error(f"Serial port enumeration failed: {e}")
+            return None
+        if len(cands) > 1:
+            logger.warning("Several Pico serial ports found %s, using %s (select one with --port)",
+                           [c[1] for c in cands], cands[0][1])
+        return cands[0][1] if cands else None
+
+    @staticmethod
+    def format_ports() -> str:
+        """Human-readable list of all serial ports, marking the auto-detect choice"""
+        chosen = PortDetector.find()
+        lines = []
+        for p in sorted(serial.tools.list_ports.comports(), key=lambda p: _natural_key(p.device)):
+            if p.vid is None and (p.description or "n/a") == "n/a":
+                continue   # legacy/unused UARTs (/dev/ttyS*) are just noise
+            ids = f"{p.vid:04X}:{p.pid:04X}" if p.vid is not None and p.pid is not None else "----:----"
+            mark = "  <- auto-detect" if p.device == chosen else ""
+            lines.append(f"{p.device:<16} {ids}  {p.description}{mark}")
+        return "\n".join(lines) if lines else "(no serial ports found)"
+
 
 # Configure logging with rotation
 class LogSetup:
@@ -294,17 +389,46 @@ class SystemMonitor:
             logger.error(f"Failed to get CPU/GPU temperature: {e}")
             return None
     
+    # psutil sensor names that report the CPU package temperature, best first:
+    # Intel, AMD (k10temp/zenpower), Raspberry Pi (cpu_thermal), generic ACPI
+    _CPU_SENSORS = ('coretemp', 'k10temp', 'zenpower', 'cpu_thermal', 'cpu-thermal', 'soc_thermal', 'acpitz')
+    _PREFERRED_LABELS = ('package id 0', 'tctl', 'tdie', 'cpu')
+    # Sensors that are certainly not the CPU/GPU (only skipped in the last-resort fallback)
+    _NON_CPU_SENSORS = ('nvme', 'drivetemp', 'iwlwifi', 'ath', 'mt79', 'ddr', 'spd')
+
+    @staticmethod
+    def _pick_temperature(entries) -> Optional[float]:
+        """Pick one reading from a sensor's entries: a package-level label if
+        there is one, else the first valid reading (e.g. amdgpu's "edge").
+        Entries are (label, current, ...)."""
+        readings = [(str(e[0] or '').lower(), e[1]) for e in entries if e[1] is not None]
+        if not readings:
+            return None
+        for label, value in readings:
+            if label in SystemMonitor._PREFERRED_LABELS:
+                return value
+        return readings[0][1]
+
     @staticmethod
     def _get_linux_cpu_temp() -> Optional[float]:
-        """Get CPU temperature on Linux systems"""
+        """CPU temperature on Linux (Ubuntu amd64 Intel/AMD, Raspberry Pi OS):
+        known CPU sensors first, then a GPU sensor (amdgpu), then any other
+        sensor that is not obviously storage/wifi/memory."""
         try:
             temps = psutil.sensors_temperatures()
-            if 'amdgpu' in temps and len(temps['amdgpu']) > 0:
-                return temps['amdgpu'][0][1]
-            else:
-                logger.warning("No AMD GPU temperature sensor found")
-                return None
-        except (psutil.Error, KeyError, IndexError) as e:
+            for name in SystemMonitor._CPU_SENSORS + ('amdgpu',):
+                value = SystemMonitor._pick_temperature(temps.get(name) or [])
+                if value is not None:
+                    return value
+            for name, entries in temps.items():
+                if name.lower().startswith(SystemMonitor._NON_CPU_SENSORS):
+                    continue
+                value = SystemMonitor._pick_temperature(entries)
+                if value is not None:
+                    return value
+            logger.warning("No usable temperature sensor found (sensors: %s)", sorted(temps) or "none")
+            return None
+        except (psutil.Error, AttributeError, KeyError, IndexError) as e:
             logger.warning(f"Failed to get Linux CPU temperature: {e}")
             return None
     
@@ -373,6 +497,8 @@ class SystemTrayIcon:
     
     def initialize(self):
         """Initialize system tray icon"""
+        if pystray is None:
+            raise RuntimeError("pystray/tray backend unavailable")
         self.icon = pystray.Icon('PiCoMonitor', icon=self.create_image(64, 64, 'blue', 'white'))
         self.icon.menu = self.create_menu()
         self.icon.title = self.title
@@ -382,25 +508,47 @@ class SystemTrayIcon:
         if self.icon:
             self.icon.run(work_function)
 
+@dataclass
+class Metric:
+    """One entry of the frame sent to the Pico. `collect(collector)` returns the
+    value; if it raises, `fallback` is sent instead so one broken sensor never
+    affects the others. Keys the firmware does not know are ignored by it."""
+    key: str
+    collect: Callable[['DataCollector'], Any]
+    fallback: Any = None
+
+
+def default_metrics() -> List[Metric]:
+    # Looked up through SystemMonitor at call time (patchable in tests)
+    return [
+        Metric('CPU', lambda dc: SystemMonitor.get_cpu_usage(dc.delay), []),   # blocks `delay` s: paces the loop
+        Metric('TEMP', lambda dc: SystemMonitor.get_cpu_temperature(), None),
+        Metric('RAM', lambda dc: SystemMonitor.get_memory_usage(), None),
+        Metric('DISKS', lambda dc: SystemMonitor.get_disk_usage(), []),
+    ]
+
+
 class DataCollector:
     """Class to handle data collection and serial communication"""
     
-    def __init__(self, port: str, initial_delay: float):
+    def __init__(self, port: Optional[str], initial_delay: float, metrics: Optional[List[Metric]] = None):
+        # port None = auto-detect (re-evaluated at every (re)connection attempt)
         self.port = port
         self.delay = initial_delay
         self.contflag = True
         self.serial_manager = None
+        self.metrics = metrics if metrics is not None else default_metrics()
+        self._wake = threading.Event()
     
     def collect_system_data(self) -> Dict[str, Any]:
         """Collect system monitoring data"""
         data = {}
-        
-        # Collect system data with error handling
-        data['CPU'] = SystemMonitor.get_cpu_usage(self.delay)
-        data['TEMP'] = SystemMonitor.get_cpu_temperature()
-        data['RAM'] = SystemMonitor.get_memory_usage()
-        data['DISKS'] = SystemMonitor.get_disk_usage()
-        
+        for metric in self.metrics:
+            try:
+                data[metric.key] = metric.collect(self)
+            except Exception as e:
+                logger.error(f"Metric {metric.key} failed: {e}")
+                data[metric.key] = metric.fallback
         return data
     
     def send_data_via_serial(self, data: Dict[str, Any], serial_conn: serial.Serial):
@@ -432,7 +580,7 @@ class DataCollector:
         """Main work loop for data collection and transmission"""
         icon.visible = True
         
-        # Validate serial port before starting
+        # Validate serial port before starting (None = auto-detect)
         if not self.validate_serial_port():
             logger.error(f"Invalid serial port: {self.port}")
             return
@@ -441,9 +589,16 @@ class DataCollector:
         retry_delay = 2  # seconds, will double on each failure up to a max
         max_delay = 30
         while self.contflag:
+            # Auto-detect on every attempt: the device may be plugged in later or
+            # change its port name
+            port = self.port or PortDetector.find()
+            if port is None:
+                logger.info("No Pico serial port found, waiting for the device...")
+                self._wake.wait(min(retry_delay, 5))
+                continue
             try:
                 # Attempt to open serial port with context manager
-                with SerialPortManager(self.port, config.BAUD_RATE, config.SERIAL_TIMEOUT) as serial_conn:
+                with SerialPortManager(port, config.BAUD_RATE, config.SERIAL_TIMEOUT) as serial_conn:
                     logger.info(f'Connected to serial port: {serial_conn.name}')
                     # Reset back‑off after a successful connection
                     retry_delay = 2
@@ -475,11 +630,13 @@ class DataCollector:
             # Wait before reconnect unless shutting down
             if self.contflag:
                 logger.info(f"Attempting to reconnect in {retry_delay} seconds...")
-                time.sleep(retry_delay)
+                self._wake.wait(retry_delay)
                 retry_delay = min(retry_delay * 2, max_delay)
     
     def validate_serial_port(self) -> bool:
         """Validate that the serial port is accessible"""
+        if self.port is None:      # auto-detect: nothing to check yet
+            return True
         try:
             if sys.platform == "win32":
                 # For Windows, basic validation
@@ -499,12 +656,7 @@ class DataCollector:
     def stop(self):
         """Stop the data collection loop and wake any sleeping back‑off"""
         self.contflag = False
-        # Wake up any time.sleep in the reconnect/back‑off loop
-        try:
-            import _thread
-            _thread.interrupt_main()
-        except Exception:
-            pass
+        self._wake.set()   # wake the reconnect/back-off wait immediately
 
 # Remove old functions as they're now in DataCollector class
 
@@ -519,8 +671,10 @@ class ArgumentValidator:
         return True
     
     @staticmethod
-    def validate_serial_port(port: str) -> bool:
-        """Validate serial port format"""
+    def validate_serial_port(port: Optional[str]) -> bool:
+        """Validate serial port format (None = auto-detect)"""
+        if port is None:
+            return True
         if sys.platform == "win32":
             if not port.startswith("COM"):
                 raise ValueError(f"Invalid serial port format for Windows: {port}")
@@ -535,7 +689,6 @@ class ArgumentValidator:
         try:
             import psutil
             import serial
-            import pystray
             return True
         except ImportError as e:
             raise ImportError(f"Missing required module: {e}")
@@ -569,11 +722,14 @@ class Application:
         argParser = argparse.ArgumentParser(description='PiCoMonitor - System monitoring tool for Raspberry Pi Pico')
         argParser.add_argument("-d", "--delay", help="Period for grabbing data (s)", type=float, default=config.DEFAULT_DELAY)
         
-        # Add port argument based on platform
-        if sys.platform == "win32":
-            argParser.add_argument("-p", "--port", help="Serial port of pico", default="COM5")
-        else:
-            argParser.add_argument("-p", "--port", help="Serial port of pico", default="/dev/ttyACM0")
+        # Port: auto-detected (Raspberry Pi USB id) unless given
+        argParser.add_argument("-p", "--port", default=None,
+                               help="Serial port of the pico (COMx / /dev/ttyACMx). "
+                                    "Default: auto-detect the Pico's USB serial port")
+        argParser.add_argument("--list-ports", help="List serial ports (marking the auto-detected one) and exit",
+                               action="store_true")
+        argParser.add_argument("--no-tray", help="Run without the system tray icon (headless / servers / Raspberry Pi OS Lite)",
+                               action="store_true")
         
         # Add logging level option
         argParser.add_argument("--debug", help="Enable debug logging", action="store_true")
@@ -595,15 +751,23 @@ class Application:
             logger.info(f"Received signal {sig}, shutting down gracefully")
             if self.tray_icon:
                 self.tray_icon.exit_action()
+            if self.data_collector:
+                self.data_collector.stop()
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
     def initialize_components(self):
         """Initialize application components"""
-        # Initialize system tray icon
-        self.tray_icon = SystemTrayIcon()
-        self.tray_icon.initialize()
+        # Initialize system tray icon (optional: --no-tray or no tray backend -> headless)
+        self.tray_icon = None
+        if not getattr(self.args, "no_tray", False):
+            try:
+                tray = SystemTrayIcon()
+                tray.initialize()
+                self.tray_icon = tray
+            except Exception as e:
+                logger.warning(f"System tray unavailable ({e}), running headless")
         
         # Initialize data collector
         self.data_collector = DataCollector(self.args.port, self.args.delay)
@@ -611,10 +775,13 @@ class Application:
     def run(self):
         """Run the main application"""
         try:
-            logger.info(f"Starting PiCoMonitor with delay={self.args.delay}s, port={self.args.port}")
+            logger.info(f"Starting PiCoMonitor with delay={self.args.delay}s, port={self.args.port or 'auto-detect'}")
             
             # Start the application
-            self.tray_icon.run(lambda icon: self.data_collector.work_loop(icon))
+            if self.tray_icon is not None:
+                self.tray_icon.run(lambda icon: self.data_collector.work_loop(icon))
+            else:
+                self.data_collector.work_loop(SimpleNamespace(visible=True))   # blocks until Ctrl+C / SIGTERM
             
         except KeyboardInterrupt:
             logger.info("User interrupted application")
@@ -629,6 +796,10 @@ def main():
         app = Application()
         app.parse_arguments()
         app.configure_logging()
+
+        if app.args.list_ports:
+            print(PortDetector.format_ports())
+            return
         
         if not app.validate_arguments():
             logger.error("Argument validation failed")

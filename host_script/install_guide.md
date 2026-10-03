@@ -113,8 +113,9 @@ Usage: PiCoMonitor.py [OPTIONS]
 Options:
   -d, --delay FLOAT    Period for grabbing data (seconds), default: 0.5
   -p, --port TEXT      Serial port of pico
-                       Windows default: COM5
-                       Linux default: /dev/ttyACM0
+                       Default: auto-detect the Pico's USB serial port
+  --list-ports         List serial ports (marking the auto-detected one) and exit
+  --no-tray            Run without the tray icon (headless: servers, Raspberry Pi OS Lite)
   --debug              Enable debug logging
 ```
 

@@ -101,7 +101,24 @@ Keep `Protocol.*` free of Pico SDK includes so it stays host-testable.
 
 Run:
 ```
-python host_script/PiCoMonitor.py --port <serial-device> [--delay <sec>]
+python host_script/PiCoMonitor.py [--port <serial-device>] [--delay <sec>] [--no-tray] [--list-ports]
+```
+Without `--port` the Pico is **auto-detected** (`PortDetector`: Raspberry Pi USB VID `2E8A`,
+CDC PID `000A`; ROM-bootloader ids are ignored; product name `PiCoMonitor` ranks first if the
+firmware ever reports it) and re-detected on every reconnect, so hot-plug and port-name changes
+work. `--list-ports` shows what is found. `--no-tray` (also the automatic fallback when no tray
+backend exists) runs headless, which is what Raspberry Pi OS Lite / servers need.
+Linux needs serial permission: `sudo usermod -aG dialout $USER` (then log in again).
+
+Host-side structure: the frame is built from a list of `Metric`s (`default_metrics()`; a failing
+metric sends its fallback instead of breaking the frame; unknown keys are ignored by the
+firmware, but keep the whole frame under the firmware's 1024-byte `FrameAssembler` buffer).
+CPU temperature on Linux (`SystemMonitor._get_linux_cpu_temp`) tries `coretemp` (Intel),
+`k10temp`/`zenpower` (AMD), `cpu_thermal` (Raspberry Pi) and ACPI before falling back to a GPU
+sensor; Windows has no psutil sensors and uses OpenHardwareMonitor if available
+(`PICOMONITOR_OHM_DLL` or `host_script/OpenHardwareMonitor/`), otherwise sends no temperature.
+Known: 21 older tests (hardware-monitor, disk-label, serial-manager mocks) assume Windows and
+fail on Linux; everything else passes (`cd host_script && pytest`).
 ```
 Command-line flags are documented with `python host_script/PiCoMonitor.py --help`.
 

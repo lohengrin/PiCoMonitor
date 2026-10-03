@@ -63,7 +63,7 @@ class TestApplication:
     def test_initialize_components(self):
         """Test component initialization"""
         app = Application()
-        app.args = Mock(delay=0.5, port='COM5')
+        app.args = Mock(delay=0.5, port='COM5', no_tray=False)
         
         app.initialize_components()
         assert app.tray_icon is not None
@@ -93,6 +93,7 @@ class TestApplication:
         with patch('sys.argv', ['PiCoMonitor.py', '--delay', '0.05', '--port', 'COM5']):
             with patch('PiCoMonitor.Application') as mock_app_class:
                 mock_app = Mock()
+                mock_app.args.list_ports = False
                 mock_app.validate_arguments.return_value = False
                 mock_app_class.return_value = mock_app
                 

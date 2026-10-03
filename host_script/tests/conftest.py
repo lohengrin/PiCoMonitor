@@ -42,7 +42,8 @@ def dummy_serial():
 @pytest.fixture
 def valid_args():
     """Valid argument namespace"""
-    return SimpleNamespace(delay=0.5, port='COM5', debug=False)
+    port = 'COM5' if sys.platform == 'win32' else '/dev/ttyACM0'
+    return SimpleNamespace(delay=0.5, port=port, debug=False)
 
 
 @pytest.fixture
