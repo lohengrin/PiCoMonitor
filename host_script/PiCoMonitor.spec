@@ -5,7 +5,7 @@ a = Analysis(
     ['PiCoMonitor.py'],
     pathex=[],
     binaries=[],
-    datas=[('OpenHardwareMonitor/OpenHardwareMonitorLib.dll', 'OpenHardwareMonitor/'), ('OpenHardwareMonitor/*.dll', 'OpenHardwareMonitor/')],
+    datas=[('LibreHardwareMonitor/*.dll', 'LibreHardwareMonitor')],
     hiddenimports=['psutil._pswindows', 'psutil._psposix', 'pythonnet', 'clr'],
     hookspath=[],
     hooksconfig={},

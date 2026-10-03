@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Tests for the modular metrics collector, Linux CPU temperature lookup,
-OpenHardwareMonitor DLL lookup and headless operation
+LibreHardwareMonitor DLL lookup and headless operation
 """
 
 import os
@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 import PiCoMonitor
-from PiCoMonitor import Application, DataCollector, Metric, SystemMonitor, find_ohm_dll
+from PiCoMonitor import Application, DataCollector, Metric, SystemMonitor, find_lhm_dll
 
 
 class TestMetrics:
@@ -75,24 +75,24 @@ class TestLinuxCpuTemp:
             assert SystemMonitor._get_linux_cpu_temp() is None
 
 
-class TestOhmLookup:
+class TestLhmLookup:
     def test_env_var_wins(self, tmp_path, monkeypatch):
         dll = tmp_path / "x.dll"
         dll.write_text("")
-        monkeypatch.setenv("PICOMONITOR_OHM_DLL", str(dll))
-        assert find_ohm_dll() == str(dll)
+        monkeypatch.setenv("PICOMONITOR_LHM_DLL", str(dll))
+        assert find_lhm_dll() == str(dll)
 
     def test_not_found(self, monkeypatch):
-        monkeypatch.delenv("PICOMONITOR_OHM_DLL", raising=False)
+        monkeypatch.delenv("PICOMONITOR_LHM_DLL", raising=False)
         with patch('PiCoMonitor.os.path.isfile', return_value=False):
-            assert find_ohm_dll() is None
+            assert find_lhm_dll() is None
 
     def test_next_to_script(self, monkeypatch):
-        monkeypatch.delenv("PICOMONITOR_OHM_DLL", raising=False)
+        monkeypatch.delenv("PICOMONITOR_LHM_DLL", raising=False)
         wanted = os.path.join(os.path.dirname(os.path.abspath(PiCoMonitor.__file__)),
-                              "OpenHardwareMonitor", "OpenHardwareMonitorLib.dll")
+                              "LibreHardwareMonitor", "LibreHardwareMonitorLib.dll")
         with patch('PiCoMonitor.os.path.isfile', side_effect=lambda p: p == wanted):
-            assert find_ohm_dll() == wanted
+            assert find_lhm_dll() == wanted
 
 
 class TestHeadless:

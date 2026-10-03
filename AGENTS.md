@@ -10,7 +10,7 @@ PiCoMonitor is a PC-monitoring system made of two parts:
   CPU/temperature/RAM/disk widgets on a small LCD and receives monitoring data over
   USB serial as JSON.
 - **Host script** (Python 3.8+) that collects system data with `psutil`
-  (plus OpenHardwareMonitor on Windows) and sends it to the Pico over serial.
+  (plus LibreHardwareMonitor on Windows) and sends it to the Pico over serial.
 
 Two display boards are supported, selected at **compile time**:
 
@@ -123,10 +123,13 @@ metric sends its fallback instead of breaking the frame; unknown keys are ignore
 firmware, but keep the whole frame under the firmware's 1024-byte `FrameAssembler` buffer).
 CPU temperature on Linux (`SystemMonitor._get_linux_cpu_temp`) tries `coretemp` (Intel),
 `k10temp`/`zenpower` (AMD), `cpu_thermal` (Raspberry Pi) and ACPI before falling back to a GPU
-sensor; Windows has no psutil sensors and uses OpenHardwareMonitor if available
-(`PICOMONITOR_OHM_DLL` or `host_script/OpenHardwareMonitor/`), otherwise sends no temperature.
-Known: 21 older tests (hardware-monitor, disk-label, serial-manager mocks) assume Windows and
-fail on Linux; everything else passes (`cd host_script && pytest`).
+sensor; Windows has no psutil sensors and uses LibreHardwareMonitor if available
+(`PICOMONITOR_LHM_DLL` or `host_script/LibreHardwareMonitor/`, git-ignored, the whole net472 release
+extracted there; `build_exe.py`/`PiCoMonitor.spec` bundle its `*.dll`): `HardwareMonitor.get_temperature()`
+sends the CPU package temperature, or the GPU core one when the CPU reads 0 (LHM needs admin rights for
+CPU sensors), otherwise no temperature.
+Known: 14 older tests (serial-manager, disk, Linux-temperature and tray mocks) fail on Windows too;
+everything else passes (`cd host_script && pytest`).
 ```
 Command-line flags are documented with `python host_script/PiCoMonitor.py --help`.
 
@@ -233,5 +236,5 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   exposes `set_backlight()`).
 - Avoid `using namespace` in headers; `using namespace pico_toolset;` is used
   in `.cpp` files.
-- The host script is Windows/Linux aware: OpenHardwareMonitor (`.NET`) is used only
-  on Windows for GPU temperature; CPU temp is unavailable on Windows.
+- The host script is Windows/Linux aware: LibreHardwareMonitor (`.NET`, via pythonnet) is used
+  only on Windows for the temperature (CPU when running as administrator, else GPU).

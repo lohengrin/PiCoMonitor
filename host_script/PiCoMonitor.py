@@ -22,6 +22,7 @@ import logging
 import logging.handlers
 import os
 import signal
+import atexit
 from typing import Callable, Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from contextlib import contextmanager
@@ -37,37 +38,41 @@ except Exception:
     pynvml = None
 
 
-def find_ohm_dll() -> Optional[str]:
-    """Locate OpenHardwareMonitorLib.dll (Windows only): $PICOMONITOR_OHM_DLL,
-    then OpenHardwareMonitor/ next to the script (or inside the PyInstaller bundle)."""
+def find_lhm_dll() -> Optional[str]:
+    """Locate LibreHardwareMonitorLib.dll (Windows only): $PICOMONITOR_LHM_DLL,
+    then LibreHardwareMonitor/ next to the script (or inside the PyInstaller bundle)."""
     candidates = []
-    env = os.environ.get("PICOMONITOR_OHM_DLL")
+    env = os.environ.get("PICOMONITOR_LHM_DLL")
     if env:
         candidates.append(env)
     for base in (getattr(sys, "_MEIPASS", None), os.path.dirname(os.path.abspath(__file__))):
         if base:
-            candidates.append(os.path.join(base, "OpenHardwareMonitor", "OpenHardwareMonitorLib.dll"))
+            candidates.append(os.path.join(base, "LibreHardwareMonitor", "LibreHardwareMonitorLib.dll"))
     for path in candidates:
         if os.path.isfile(path):
             return path
     return None
 
 
-# OpenHardwareMonitor is Windows-only (.NET); optional: without it (or without
-# pythonnet) the GPU temperature is simply unavailable.
+# LibreHardwareMonitor is Windows-only (.NET Framework 4.7.2); optional: without it
+# (or without pythonnet) the temperature is simply unavailable.
 Computer = None
+SensorType = None
 if sys.platform == "win32":
     try:
         import clr  # the pythonnet module (Windows only)
-        _ohm_dll = find_ohm_dll()
-        if _ohm_dll is None:
-            raise FileNotFoundError("OpenHardwareMonitorLib.dll not found "
-                                    "(set PICOMONITOR_OHM_DLL or put it in host_script/OpenHardwareMonitor/)")
-        clr.AddReference(_ohm_dll)
-        from OpenHardwareMonitor.Hardware import Computer
+        _lhm_dll = find_lhm_dll()
+        if _lhm_dll is None:
+            raise FileNotFoundError("LibreHardwareMonitorLib.dll not found "
+                                    "(set PICOMONITOR_LHM_DLL or put it in host_script/LibreHardwareMonitor/)")
+        # its dependencies (HidSharp, DiskInfoToolkit, System.*.dll...) sit next to it
+        sys.path.append(os.path.dirname(_lhm_dll))
+        clr.AddReference(_lhm_dll)
+        from LibreHardwareMonitor.Hardware import Computer, SensorType
     except Exception as _e:
         Computer = None
-        print(f"OpenHardwareMonitor unavailable, no GPU temperature: {_e}", file=sys.stderr)
+        SensorType = None
+        print(f"LibreHardwareMonitor unavailable, no temperature: {_e}", file=sys.stderr)
 
 # Configuration constants
 @dataclass
@@ -252,47 +257,104 @@ logger_setup = LogSetup()
 logger = logger_setup.logger
 
 class HardwareMonitor:
-    """Class to handle hardware monitoring functionality"""
-    
+    """Temperature through LibreHardwareMonitor (Windows only)"""
+
+    # CPU temperature sensor names, best first: Intel, AMD, then generic core values
+    _CPU_SENSORS = ('cpu package', 'core (tctl/tdie)', 'core (tctl)', 'core (tdie)', 'core average', 'core max')
+    _GPU_SENSORS = ('gpu core',)
+
     def __init__(self):
         self.computer = None
         if sys.platform == "win32":
             self._initialize()
-    
+
     def _initialize(self):
         """Initialize hardware monitoring with error handling (Windows only)"""
         try:
             self.computer = Computer()
-            self.computer.GPUEnabled = True
+            self.computer.IsCpuEnabled = True
+            self.computer.IsGpuEnabled = True
             self.computer.Open()
             logger.info("Hardware monitoring initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize hardware monitoring: {e}")
             self.computer = None
-    
-    def get_gpu_temperature(self) -> Optional[float]:
-        """Get GPU temperature using OpenHardwareMonitor (Windows only)"""
+
+    @staticmethod
+    def _temperatures(hardware) -> List[Tuple[str, float]]:
+        """(lower-case name, value) of the valid temperature sensors of a hardware
+        and its sub-hardware. 0 is how LHM reports a CPU sensor it cannot read
+        (no admin rights / driver), so it is treated as missing."""
+        out = []
+        sensors = list(hardware.Sensors)
+        for sub in hardware.SubHardware:
+            sub.Update()
+            sensors.extend(sub.Sensors)
+        for sensor in sensors:
+            try:
+                if SensorType is not None and sensor.SensorType != SensorType.Temperature:
+                    continue
+                if "/temperature" not in str(sensor.Identifier):
+                    continue
+                value = sensor.Value
+                if value is not None and float(value) > 0:
+                    out.append((str(sensor.Name).lower(), float(value)))
+            except Exception as e:
+                logger.debug(f"Unreadable sensor: {e}")
+        return out
+
+    @staticmethod
+    def _pick(temps: List[Tuple[str, float]], preferred: Tuple[str, ...]) -> Optional[float]:
+        """The first preferred sensor present, else the first reading"""
+        for name in preferred:
+            for label, value in temps:
+                if label == name:
+                    return value
+        return temps[0][1] if temps else None
+
+    def get_temperature(self) -> Optional[float]:
+        """CPU temperature, or the GPU one when the CPU cannot be read
+        (LibreHardwareMonitor needs admin rights for most CPU sensors)"""
         if sys.platform != "win32" or self.computer is None:
             logger.warning("Hardware monitoring not available on this platform")
             return None
-        
+
         try:
-            self.computer.Hardware[0].Update()
-            for sensor in self.computer.Hardware[0].Sensors:
-                if "/temperature" in str(sensor.Identifier):
-                    return sensor.get_Value()
-            logger.warning("No temperature sensor found in OpenHardwareMonitor")
+            cpu, gpu = None, None
+            for hardware in self.computer.Hardware:
+                hardware.Update()
+                kind = str(hardware.HardwareType)
+                temps = self._temperatures(hardware)
+                if kind == "Cpu":
+                    cpu = cpu if cpu is not None else self._pick(temps, self._CPU_SENSORS)
+                elif kind.startswith("Gpu"):
+                    gpu = gpu if gpu is not None else self._pick(temps, self._GPU_SENSORS)
+            if cpu is not None:
+                return cpu
+            if gpu is not None:
+                return gpu
+            logger.warning("No temperature sensor found in LibreHardwareMonitor")
             return None
         except Exception as e:
-            logger.warning(f"Failed to get GPU temperature: {e}")
+            logger.warning(f"Failed to get temperature: {e}")
             return None
-    
+
+    def close(self):
+        """Release LibreHardwareMonitor's drivers"""
+        if self.computer is not None:
+            try:
+                self.computer.Close()
+            except Exception:
+                pass
+            self.computer = None
+
     def is_available(self) -> bool:
         """Check if hardware monitoring is available"""
         return sys.platform == "win32" and self.computer is not None
 
 # Initialize hardware monitor
 hardware_monitor = HardwareMonitor()
+atexit.register(hardware_monitor.close)
 
 class SystemMonitor:
     """Class to handle system monitoring functionality"""
@@ -390,7 +452,7 @@ class SystemMonitor:
             if sys.platform.startswith("linux"):
                 return SystemMonitor._get_linux_cpu_temp()
             elif sys.platform == "win32":
-                return hardware_monitor.get_gpu_temperature()
+                return hardware_monitor.get_temperature()
             else:
                 logger.warning("Temperature monitoring not supported on this platform")
                 return None

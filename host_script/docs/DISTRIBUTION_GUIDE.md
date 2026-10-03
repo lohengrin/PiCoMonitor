@@ -27,11 +27,10 @@ For a more robust distribution, create a package with:
 ```
 PiCoMonitor_Distribution/
 ├── PiCoMonitor.exe          # Main executable
-├── OpenHardwareMonitor/      # Required DLLs
-│   ├── OpenHardwareMonitorLib.dll
-│   ├── Aga.Controls.dll
-│   ├── OxyPlot.dll
-│   └── OxyPlot.WindowsForms.dll
+├── LibreHardwareMonitor/     # Required DLLs (already bundled inside the EXE)
+│   ├── LibreHardwareMonitorLib.dll
+│   ├── HidSharp.dll
+│   └── ...                   # the other DLLs of the release
 ├── README.md                 # User instructions
 ├── requirements.txt          # Python requirements (for source)
 └── install_guide.md          # Installation instructions
@@ -46,7 +45,7 @@ PiCoMonitor_Distribution/
 
 ### For Developers (Full package)
 1. Copy the entire `PiCoMonitor_Distribution` folder
-2. Ensure all DLL files are in the `OpenHardwareMonitor` subdirectory
+2. Ensure all DLL files are in the `LibreHardwareMonitor` subdirectory
 3. Run `PiCoMonitor.exe` from the distribution folder
 
 ## Command Line Usage
@@ -69,7 +68,7 @@ PiCoMonitor.exe --debug
 
 ### Common Issues
 
-1. **Missing DLL errors**: Ensure all files from `OpenHardwareMonitor/` are distributed with the EXE
+1. **Missing DLL errors**: Ensure all DLLs from `LibreHardwareMonitor/` were present when building the EXE
 2. **Serial port not found**: Use `-p` flag to specify correct COM port
 3. **Permission issues**: Run as administrator if serial port access is denied
 4. **Antivirus warnings**: The EXE may be flagged as unknown - add exception
@@ -97,7 +96,7 @@ To verify the build works:
 ## Notes
 
 - The EXE includes all Python dependencies (psutil, pystray, Pillow, etc.)
-- OpenHardwareMonitor DLLs are bundled for GPU temperature monitoring
+- LibreHardwareMonitor DLLs are bundled for temperature monitoring (CPU when run as administrator, GPU otherwise)
 - The application runs as a system tray icon with no console window
 - Default serial port: auto-detected (the Pico's USB serial port); override with `-p`
 - Default data collection interval: 0.5 seconds

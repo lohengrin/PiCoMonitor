@@ -53,6 +53,7 @@ dkms.conf
 
 build/
 host_script/OpenHardwareMonitor/
+host_script/LibreHardwareMonitor/
 
 **/__pycache__
 host_script/logs/**

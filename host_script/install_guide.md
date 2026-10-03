@@ -8,11 +8,14 @@
 pip install -r requirements.txt
 ```
 
-### 2. Install OpenHardwareMonitor (Windows only)
+### 2. Install LibreHardwareMonitor (Windows only)
 
-1. Download OpenHardwareMonitor from: https://openhardwaremonitor.org/
-2. Extract the `OpenHardwareMonitorLib.dll` file
-3. Place it in the `OpenHardwareMonitor` directory within this project
+1. Download a LibreHardwareMonitor release (.NET Framework build) from: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases
+2. Extract the whole archive into the `LibreHardwareMonitor` directory within this project
+   (`LibreHardwareMonitorLib.dll` needs the other DLLs next to it), or point
+   `PICOMONITOR_LHM_DLL` to `LibreHardwareMonitorLib.dll`
+3. Run PiCoMonitor as administrator to get the CPU temperature (without it, the GPU
+   temperature is sent instead)
 
 ### 3. Install System Dependencies (Linux)
 
@@ -34,9 +37,9 @@ sudo usermod -a -G dialout $USER
    ```bash
    pip install -r requirements.txt
    ```
-3. **Install OpenHardwareMonitor**:
-   - Download from https://openhardwaremonitor.org/
-   - Copy `OpenHardwareMonitorLib.dll` to `OpenHardwareMonitor/` directory
+3. **Install LibreHardwareMonitor**:
+   - Download from https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases
+   - Extract the archive into the `LibreHardwareMonitor/` directory
 4. **Run the application**:
    ```bash
    python PiCoMonitor.py
@@ -88,8 +91,11 @@ sudo usermod -a -G dialout $USER
   sudo usermod -a -G dialout $USER
   ```
 
-#### Missing OpenHardwareMonitorLib.dll
-- **Solution**: Download from https://openhardwaremonitor.org/ and place in correct directory
+#### Missing LibreHardwareMonitorLib.dll
+- **Solution**: Download from https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases and extract into `LibreHardwareMonitor/`
+
+#### No CPU temperature on Windows (GPU temperature shown instead)
+- **Solution**: LibreHardwareMonitor needs administrator rights to read the CPU sensors: run PiCoMonitor as administrator
 
 #### Python Module Not Found
 - **Solution**: Install missing module:

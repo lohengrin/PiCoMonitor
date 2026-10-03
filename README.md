@@ -102,7 +102,8 @@ $ python host_script/PiCoMonitor.py --no-tray      # headless (servers, Raspberr
 ```
 On Linux your user needs access to the serial device: `sudo usermod -aG dialout $USER` (log in again).
 CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi); on Windows it needs
-OpenHardwareMonitor (`host_script/OpenHardwareMonitor/` or `PICOMONITOR_OHM_DLL`).
+LibreHardwareMonitor (`host_script/LibreHardwareMonitor/` or `PICOMONITOR_LHM_DLL`), and administrator
+rights for the CPU sensor (otherwise the GPU temperature is sent).
 
 # Installation
 - Copy uf2 file to the pico or use picotool: 

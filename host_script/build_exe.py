@@ -20,8 +20,7 @@ def build_exe():
         '--clean',               # Clean PyInstaller cache
         '--noconfirm',           # Don't ask for confirmation
         '--log-level=INFO',       # Log level
-        '--add-data=OpenHardwareMonitor/OpenHardwareMonitorLib.dll;OpenHardwareMonitor/',  # Include DLL
-        '--add-data=OpenHardwareMonitor/*.dll;OpenHardwareMonitor/',  # Include any other DLLs
+        '--add-data=LibreHardwareMonitor/*.dll;LibreHardwareMonitor/',  # LibreHardwareMonitorLib.dll + its dependencies
         '--hidden-import=psutil._pswindows',  # Windows-specific psutil imports
         '--hidden-import=psutil._psposix',   # Linux-specific psutil imports  
         '--hidden-import=pythonnet',         # For .NET interop
@@ -36,10 +35,10 @@ def build_exe():
         print("Warning: icon.ico not found, using default icon")
         build_params.remove('--icon=icon.ico')
     
-    # Check if OpenHardwareMonitor directory exists
-    if not os.path.exists('OpenHardwareMonitor'):
-        print("Error: OpenHardwareMonitor directory not found")
-        print("Please ensure OpenHardwareMonitorLib.dll is in the OpenHardwareMonitor directory")
+    # Check if LibreHardwareMonitor is present
+    if not os.path.exists(os.path.join('LibreHardwareMonitor', 'LibreHardwareMonitorLib.dll')):
+        print("Error: LibreHardwareMonitor/LibreHardwareMonitorLib.dll not found")
+        print("Extract a LibreHardwareMonitor release (net472 build) into the LibreHardwareMonitor directory")
         return False
     
         # Version file was removed due to format issues

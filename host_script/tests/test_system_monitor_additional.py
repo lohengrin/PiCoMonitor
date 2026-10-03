@@ -45,12 +45,12 @@ class TestSystemMonitorAdditional:
         with patch('PiCoMonitor.sys.platform', 'win32'):
             with patch('PiCoMonitor.hardware_monitor') as mock_hw:
                 # Test different temperature values
-                mock_hw.get_gpu_temperature.return_value = 45.0
+                mock_hw.get_temperature.return_value = 45.0
                 result = SystemMonitor.get_cpu_temperature()
                 assert result == 45.0
                 
                 # Test None case
-                mock_hw.get_gpu_temperature.return_value = None
+                mock_hw.get_temperature.return_value = None
                 result = SystemMonitor.get_cpu_temperature()
                 assert result is None
 

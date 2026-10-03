@@ -10,7 +10,7 @@
 
 ### 2. Hardware Monitoring Error Handling
 - Added `initialize_hardware_monitoring()` function with try-catch
-- Graceful handling of OpenHardwareMonitor initialization failures
+- Graceful handling of LibreHardwareMonitor initialization failures
 - Hardware monitoring failures don't crash the application
 - Proper cleanup of hardware monitoring resources
 
@@ -28,7 +28,7 @@
 ### 5. Temperature Monitoring Error Handling
 - Comprehensive error handling for both Linux and Windows platforms
 - Linux: Handles missing sensors, invalid sensor data
-- Windows: Handles OpenHardwareMonitor sensor access failures
+- Windows: Handles LibreHardwareMonitor sensor access failures
 - Graceful degradation when temperature data is unavailable
 - Returns `None` instead of crashing when temperature can't be read
 
