@@ -74,7 +74,16 @@ make
 - Default PICO_BOARD is `pico_w`. Pico W links `pico_cyw43_arch_none` (WiFi not
   used yet, only to reach the GPIOs).
 - `gpio 15` must be toggled at startup for the CrowPanel LCD reset.
-- Build output: `PiCoMonitor.uf2` (plus `.bin/.hex/.elf` via `pico_add_extra_outputs`).
+- Build output: `PiCoMonitor.uf2` (plus `.bin/.hex/.elf` via `pico_add_extra_outputs`),
+  and a second target `PiCoMonitor_picoboot` producing `PiCoMonitor.picoboot.bin`
+  (+ `.uf2`): the same sources linked into the PicoBoot bootloader's app partition
+  (`0x10080000`) via `picoboot_set_app_flash_region()`. Options: `PICOBOOT_DIR`
+  (default `../PicoBoot`; skipped with a warning if absent), `PICOBOOT_FLASH_SIZE`
+  (default 2 MiB), `WITH_PICOBOOT` (default ON). Both targets share one
+  `picomonitor_configure()` function in `CMakeLists.txt` -- put new link
+  libraries/definitions there, not on one target.
+- `make install_firmware` builds and copies all `.bin`/`.uf2` to the git-ignored
+  `install/`, named `PiCoMonitor-<crowpanel|picodisplay>-<PICO_BOARD>-<build type>[.picoboot].<ext>`.
 - `.vscode/` is configured for CMake + cortex-debug.
 
 There is no automated test or lint step for the C++ side; correctness is verified by
