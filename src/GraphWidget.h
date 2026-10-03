@@ -12,7 +12,7 @@ public:
     GraphWidget(int x, int y, int w, int h, double scale, pico_toolset::Color color, const std::string& label)
         : m_x(x), m_y(y), m_w(w), m_h(h), m_label(label),
           m_graph(x + 2, y + 2, w - 4, h - 4, scale, color, m_label.c_str(),
-                   pico_toolset::kGlyphFont5x8.glyphs, pico_toolset::glyph_font_height) {}
+                   pico_toolset::kGlyphFont5x8.glyphs, pico_toolset::glyph_font_height, 2) {}
 
     //! Values as % per code
     void pushValue(double val) { m_graph.push_value(val); }

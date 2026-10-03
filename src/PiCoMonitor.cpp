@@ -116,6 +116,7 @@ int main()
 		}
 
 		// Render
+		cpu->tick();
 		screen.update();
 		board.present();
 

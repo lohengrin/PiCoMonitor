@@ -35,8 +35,11 @@ void DiskWidget::draw(DisplayDriver& display) const {
         bar.draw(display);
 
         char buf[2] = {d.label.empty() ? '?' : d.label[0], 0};
-        TextWidget text(m_x + 4, y - 4, buf, kColorWhite, kColorBlack,
-                         kGlyphFont5x8.glyphs, glyph_font_height);
+        const uint8_t scale = spacing >= 20 ? 2 : 1;
+        TextWidget text(0, 0, buf, bar.color(), kColorBlack,
+                         kGlyphFont5x8.glyphs, glyph_font_height, scale);
+        text.set_transparent(true);
+        text.set_centered(m_x + label_w / 2, y);
         text.draw(display);
     }
 }

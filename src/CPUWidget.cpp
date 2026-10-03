@@ -21,6 +21,11 @@ void CPUWidget::setValues(const std::vector<double>& cpus) {
         m_bars[i].set_value(static_cast<float>(cpus[i] / 100.0));
 }
 
+void CPUWidget::tick() {
+    for (auto& bar : m_bars)
+        bar.tick();
+}
+
 void CPUWidget::draw(DisplayDriver& display) const {
     Color border = Color::from_rgb888(0, 50, 100);
     display.draw_line(m_x, m_y, m_x + m_w - 1, m_y, border);
