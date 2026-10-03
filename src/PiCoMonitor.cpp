@@ -4,6 +4,7 @@
 #include "CPUWidget.h"
 #include "GraphWidget.h"
 #include "DiskWidget.h"
+#include "NoSignalWidget.h"
 #include "pico_toolset/screen.h"
 
 // Platform header selected by CMake
@@ -32,6 +33,9 @@ using namespace pico_toolset;
 
 static const int64_t DimmingTime = 5000000; // 5 seconds
 static const int64_t DimmingSpeed = 10000;  // 0.01 seconds
+//! Without a valid frame for this long (after data was received at least once)
+//! the "NO SIGNAL" banner is shown. Keep above the host's send period.
+static const int64_t NoSignalTime = 3000000; // 3 seconds
 
 int main()
 {
@@ -70,6 +74,10 @@ int main()
 	screen.set_widget(Screen::BL, cpu.get());
 	screen.set_widget(Screen::BR, disks.get());
 
+	// Full-screen slot is drawn last: used for the "NO SIGNAL" overlay
+	std::unique_ptr<NoSignalWidget> noSignal(new NoSignalWidget(screen.driver().width(), screen.driver().height()));
+	screen.set_widget(Screen::FS, noSignal.get());
+
 	// Backlight dimming state (was previously tracked inside the old Screen
 	// base class; pico_toolset::Screen only exposes set_backlight(), so this
 	// small state machine lives here instead).
@@ -77,9 +85,10 @@ int main()
 	uint8_t target_backlight = 255;
 	board.set_backlight(backlight);
 
-	// First draw
-	screen.update();
-	board.present();
+	// The screen is only re-rendered when something changed (new data, a CPU
+	// max marker still falling, the NO SIGNAL banner toggling).
+	bool dirty = true;
+	bool hadData = false;
 
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
 	absolute_time_t  lastUpdate = get_absolute_time();
@@ -104,16 +113,35 @@ int main()
 				ram->pushValue(data.ram);
 
 			lastUpdate = get_absolute_time();
+			hadData = true;
+			dirty = true;
 		}
 
-		// Render
-		cpu->tick();
-		screen.update();
-		board.present();
-
-		// Manage dimming if no data
 		absolute_time_t  now = get_absolute_time();
 		auto diff = absolute_time_diff_us(lastUpdate, now);
+
+		// Signal lost (only after having received data: at boot the widgets'
+		// own placeholder labels are shown instead)
+		const bool signalLost = hadData && diff >= NoSignalTime;
+		if (signalLost != noSignal->visible())
+		{
+			noSignal->set_visible(signalLost);
+			dirty = true;
+		}
+
+		// Falling CPU max markers keep the screen animating
+		if (cpu->tick())
+			dirty = true;
+
+		// Render only on change
+		if (dirty)
+		{
+			screen.update();
+			board.present();
+			dirty = false;
+		}
+
+		// Manage dimming if no data
 		if (diff >= DimmingTime)
 		{
 			uint64_t dimDelta = floor((diff-DimmingTime)/DimmingSpeed);

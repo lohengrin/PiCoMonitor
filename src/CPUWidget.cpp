@@ -21,9 +21,11 @@ void CPUWidget::setValues(const std::vector<double>& cpus) {
         m_bars[i].set_value(static_cast<float>(cpus[i] / 100.0));
 }
 
-void CPUWidget::tick() {
+bool CPUWidget::tick() {
+    bool moved = false;
     for (auto& bar : m_bars)
-        bar.tick();
+        moved |= bar.tick();
+    return moved;
 }
 
 void CPUWidget::draw(DisplayDriver& display) const {

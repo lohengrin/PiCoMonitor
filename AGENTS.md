@@ -48,6 +48,7 @@ tests/                         host-side unit tests for the protocol layer (cmak
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
     GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
     DiskWidget.*                disk usage bars, composed from pico_toolset::HBarWidget
+    NoSignalWidget.*           "NO SIGNAL" overlay banner (Screen::FS slot, drawn last)
     picojson.h                 vendored single-header JSON parser (do not modify)
 host_script/
     PiCoMonitor.py             host monitoring daemon (CLI args, tray icon, logging)
@@ -159,6 +160,12 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   selected board's source, and `PiCoMonitor.cpp` keeps its `#ifdef`s confined
   to the board header include + `using Board = ...`. Keep both board builds
   working when touching anything platform-related.
+- The main loop re-renders **only when something changed** (`dirty` flag): a new
+  frame, a CPU max marker still falling (`CPUWidget::tick()` returns true while
+  moving), or the NO SIGNAL banner toggling. The loop itself still ticks at
+  100 Hz to poll USB/buttons. After 3 s (`NoSignalTime`) without a valid frame,
+  and only once data was received at least once, `NoSignalWidget` is shown.
+  Anything new that animates must return "changed" to the loop the same way.
 - Backlight dimming (5 s timeout, gradual fade) lives directly in
   `PiCoMonitor.cpp`'s main loop as two local `uint8_t` variables
   (`backlight`/`target_backlight`) -- it used to live inside the old `Screen`

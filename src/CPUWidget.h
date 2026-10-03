@@ -15,8 +15,9 @@ public:
     //! Values as % per core
     void setValues(const std::vector<double>& cpus);
 
-    //! Call once per rendered frame: makes each core's max marker fall.
-    void tick();
+    //! Call once per main-loop iteration: makes each core's max marker fall.
+    //! @return true while a marker is still moving (the widget needs redrawing)
+    bool tick();
 
     void draw(pico_toolset::DisplayDriver& display) const override;
 

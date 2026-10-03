@@ -48,6 +48,8 @@ src/GraphWidget.h
 src/GraphWidget.cpp
 src/DiskWidget.h
 src/DiskWidget.cpp
+src/NoSignalWidget.h
+src/NoSignalWidget.cpp
 src/PiCoMonitor.cpp
 ${BOARD_SRC}
 )
