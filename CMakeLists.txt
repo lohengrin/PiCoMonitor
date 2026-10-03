@@ -54,6 +54,8 @@ src/OverlayWidget.h
 src/OverlayWidget.cpp
 src/Pages.h
 src/Pages.cpp
+src/Settings.h
+src/Settings.cpp
 src/Status.h
 src/Status.cpp
 src/Input.h
@@ -73,6 +75,7 @@ set(PICO_TOOLSET_BUILD_PSRAM   OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_USB_HID OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_RESET_BUTTONS ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_RGB_LED ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_FLASH_STORE ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_DVI_HDMI OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FAULT_HANDLER OFF CACHE BOOL "" FORCE)
 include(third_party/pico-toolset/cmake/pico_fatfs.cmake)
@@ -82,7 +85,15 @@ add_subdirectory(third_party/pico-toolset)
 # its application partition): <name>.picoboot.bin. Needs a PicoBoot checkout,
 # located via -DPICOBOOT_DIR=... (default: sibling ../PicoBoot).
 set(PICOBOOT_DIR "${CMAKE_CURRENT_LIST_DIR}/../PicoBoot" CACHE PATH "PicoBoot checkout")
-set(PICOBOOT_FLASH_SIZE 2097152 CACHE STRING "Total flash size (bytes) of the target board")
+
+# Flash layout: the last PICOMONITOR_SETTINGS_SECTORS sectors hold the persistent
+# settings (pico_toolset FlashStore). The firmware is linked to stay clear of them
+# (shorter FLASH region), and they sit at the end of flash so they also survive
+# PicoBoot reloading the app or a UF2 flash.
+set(PICOMONITOR_FLASH_SIZE 2097152 CACHE STRING "Total flash size (bytes) of the target board (Pico, Pico W, CrowPanel: 2 MiB)")
+set(PICOMONITOR_SETTINGS_SECTORS 2)
+math(EXPR PICOMONITOR_SETTINGS_BYTES "${PICOMONITOR_SETTINGS_SECTORS} * 4096")
+math(EXPR PICOMONITOR_APP_FLASH_SIZE "${PICOMONITOR_FLASH_SIZE} - ${PICOMONITOR_SETTINGS_BYTES}")
 option(WITH_PICOBOOT "Also build PiCoMonitor.picoboot.bin for PicoBoot" ON)
 
 # Common link libraries, definitions and stdio settings for a firmware target
@@ -95,6 +106,7 @@ function(picomonitor_configure TARGET)
         pico_toolset_screen
         pico_toolset_reset_buttons
         pico_toolset_rgb_led
+        pico_toolset_flash_store
         )
 
     IF(WITH_PICODISPLAY)
@@ -108,12 +120,24 @@ function(picomonitor_configure TARGET)
         target_link_libraries(${TARGET} pico_cyw43_arch_none)
     ENDIF()
 
+    target_compile_definitions(${TARGET} PRIVATE
+        PICOMONITOR_FLASH_SIZE=${PICOMONITOR_FLASH_SIZE}
+        PICOMONITOR_SETTINGS_SECTORS=${PICOMONITOR_SETTINGS_SECTORS})
+
     pico_enable_stdio_usb(${TARGET} 1)
     pico_enable_stdio_uart(${TARGET} 0)
 
     # create map/bin/hex/uf2 file in addition to ELF.
     pico_add_extra_outputs(${TARGET})
 endfunction()
+
+# Standalone image: keep the firmware out of the settings sectors (FLASH region
+# shortened by the reserve; a firmware that grows into it fails at link time)
+set(PICOMONITOR_LD_DIR ${CMAKE_CURRENT_BINARY_DIR}/PiCoMonitor_flash_region)
+file(MAKE_DIRECTORY ${PICOMONITOR_LD_DIR})
+file(WRITE ${PICOMONITOR_LD_DIR}/pico_flash_region.ld
+     "FLASH(rx) : ORIGIN = 0x10000000, LENGTH = ${PICOMONITOR_APP_FLASH_SIZE}\n")
+pico_add_linker_script_override_path(PiCoMonitor ${PICOMONITOR_LD_DIR} FILES pico_flash_region.ld)
 
 picomonitor_configure(PiCoMonitor)
 
@@ -122,7 +146,7 @@ IF(WITH_PICOBOOT)
         add_executable(PiCoMonitor_picoboot ${PICOMONITOR_SRC})
         set_target_properties(PiCoMonitor_picoboot PROPERTIES OUTPUT_NAME PiCoMonitor.picoboot)
         include(${PICOBOOT_DIR}/cmake/picoboot_app_linker.cmake)
-        picoboot_set_app_flash_region(PiCoMonitor_picoboot ${PICOBOOT_FLASH_SIZE})
+        picoboot_set_app_flash_region(PiCoMonitor_picoboot ${PICOMONITOR_APP_FLASH_SIZE})   # also keeps the settings sectors free
         picomonitor_configure(PiCoMonitor_picoboot)   # -> PiCoMonitor.picoboot.bin
     ELSE()
         message(WARNING "PicoBoot not found at ${PICOBOOT_DIR} (set PICOBOOT_DIR): skipping PiCoMonitor.picoboot.bin")

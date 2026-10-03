@@ -45,6 +45,8 @@ tests/                         host-side unit tests for the protocol layer (cmak
     Status.h / Status.cpp      computeStatus(): worst-of Ok/Warning/Critical from a frame, pure C++, host-tested
     CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
     PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RgbLed + DebouncedButtons
+    Settings.h / Settings.cpp  persistent settings (backlight, page): serialization, SettingsStore (on the toolset's
+                               FlashStore) and SettingsSaver (write only after 3 s without change); host-tested
     Pages.h / Pages.cpp        page manager: Overview / Network / System / GPU, owns all widgets, switches the
                                Screen's slots; extra pages become available when the host first sends their data
                                (pure widget logic, host-tested)
@@ -88,8 +90,8 @@ make
   and a second target `PiCoMonitor_picoboot` producing `PiCoMonitor.picoboot.bin`
   (+ `.uf2`): the same sources linked into the PicoBoot bootloader's app partition
   (`0x10080000`) via `picoboot_set_app_flash_region()`. Options: `PICOBOOT_DIR`
-  (default `../PicoBoot`; skipped with a warning if absent), `PICOBOOT_FLASH_SIZE`
-  (default 2 MiB), `WITH_PICOBOOT` (default ON). Both targets share one
+  (default `../PicoBoot`; skipped with a warning if absent), `PICOMONITOR_FLASH_SIZE`
+  (total flash, default 2 MiB), `WITH_PICOBOOT` (default ON). Both targets share one
   `picomonitor_configure()` function in `CMakeLists.txt` -- put new link
   libraries/definitions there, not on one target.
 - `make install_firmware` builds and copies all `.bin`/`.uf2` to the git-ignored
@@ -192,6 +194,14 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   page and show the page name via `OverlayWidget::show_toast`. To add a page: add its widgets and
   a `kCount` entry in `Pages`, gate it with a `m_seen_*` flag set in `update()`, add it to
   `apply()`, and add the host metric as an optional `Metric` in `host_script/PiCoMonitor.py`.
+- Settings persist in the **last 2 flash sectors** (`PICOMONITOR_SETTINGS_SECTORS`,
+  pico_toolset `FlashStore`, CRC'd append-only records, erase only every 16 saves). `CMakeLists.txt`
+  shortens the firmware's FLASH region by that reserve (standalone: generated
+  `pico_flash_region.ld`; PicoBoot image: smaller size passed to `picoboot_set_app_flash_region`),
+  so a firmware that grows into it fails at link time. To persist another value: add a field at the END
+  of `Settings` and handle the new version in `Settings::deserialize` (old records must stay readable).
+  Flash writes halt execution for a few ms (interrupts off): never save per-frame, only via
+  `SettingsSaver`. Core1 is not used; `FlashStore` assumes that (see its header).
 - Input is the same on both boards: four logical **corners** (`Input.h`).
   `Board::poll_input()` returns the corners that fired this call (press +
   auto-repeat via `RepeatFilter`); `PiCoMonitor.cpp` maps them to actions in one

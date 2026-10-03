@@ -64,6 +64,34 @@ static void test_availability_and_cycling() {
     CHECK(p.available(Pages::Network) && p.available(Pages::Gpu));
 }
 
+static void test_preferred_page() {
+    Fake d(240, 135); Screen s(d); Pages p(s);
+    p.update(decode(kBasic));
+    // restore a page that does not exist yet: stays on Overview but remembers the wish
+    p.set_preferred(Pages::Gpu);
+    CHECK(p.current() == Pages::Overview && p.preferred() == Pages::Gpu);   // persisted value keeps the wish
+    p.update(decode(kBasic));
+    CHECK(p.current() == Pages::Overview);
+    p.update(decode(kGpu));                          // data arrives: switch
+    CHECK(p.current() == Pages::Gpu && p.preferred() == Pages::Gpu);
+
+    // a user switch cancels a pending request
+    Fake d2(240, 135); Screen s2(d2); Pages q(s2);
+    q.update(decode(kBasic));
+    q.set_preferred(Pages::System);
+    q.update(decode(kNet));                          // Network becomes available
+    q.next();                                        // user goes to Network
+    CHECK(q.current() == Pages::Network && q.preferred() == Pages::Network);
+    q.update(decode(kSys));                          // System appears: must NOT jump there
+    CHECK(q.current() == Pages::Network);
+
+    // already available: immediate; out-of-range ignored
+    q.set_preferred(Pages::System);
+    CHECK(q.current() == Pages::System);
+    q.set_preferred(static_cast<Pages::Id>(99));
+    CHECK(q.current() == Pages::System);
+}
+
 static void test_each_page_draws() {
     Fake d(320, 240); Screen s(d); Pages p(s);
     p.update(decode(kBasic)); p.update(decode(kNet)); p.update(decode(kSys)); p.update(decode(kGpu));
@@ -91,6 +119,7 @@ static void test_tick() {
 
 int main() {
     test_availability_and_cycling();
+    test_preferred_page();
     test_each_page_draws();
     test_tick();
     if (failures) { printf("%d failure(s)\n", failures); return 1; }

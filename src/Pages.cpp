@@ -95,8 +95,24 @@ bool Pages::available(Id id) const
     }
 }
 
+void Pages::set_preferred(Id id)
+{
+    if (id < 0 || id >= kCount)
+        return;
+    if (available(id)) {
+        m_pending = -1;
+        if (id != m_current) {
+            m_current = id;
+            apply();
+        }
+    } else {
+        m_pending = id;
+    }
+}
+
 void Pages::step(int dir)
 {
+    m_pending = -1;     // the user chose: forget the restored page
     int id = m_current;
     for (int i = 0; i < kCount; ++i) {
         id = (id + dir + kCount) % kCount;
@@ -194,4 +210,8 @@ void Pages::update(const MonitorData& d)
         m_gpu_info->setRows(std::move(info));
         m_seen_gpu = true;
     }
+
+    // A restored page that was not available at boot: show it once it is
+    if (m_pending >= 0 && available(static_cast<Id>(m_pending)))
+        set_preferred(static_cast<Id>(m_pending));
 }

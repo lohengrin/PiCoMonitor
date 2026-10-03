@@ -26,3 +26,11 @@ target_include_directories(test_pages PRIVATE ../src stub ${TOOLSET_SCREEN} ${TO
 target_compile_options(test_pages PRIVATE -Wall -Wextra -fsanitize=address,undefined)
 target_link_options(test_pages PRIVATE -fsanitize=address,undefined)
 add_test(NAME pages COMMAND test_pages)
+
+# Settings + the toolset's FlashStore against a fake flash (portable part only, no Pico SDK)
+set(TOOLSET_FLASH_STORE ../third_party/pico-toolset/components/flash_store)
+add_executable(test_settings test_settings.cpp ../src/Settings.cpp ${TOOLSET_FLASH_STORE}/src/flash_store.cpp)
+target_include_directories(test_settings PRIVATE ../src ${TOOLSET_FLASH_STORE}/include)
+target_compile_options(test_settings PRIVATE -Wall -Wextra -fsanitize=address,undefined)
+target_link_options(test_settings PRIVATE -fsanitize=address,undefined)
+add_test(NAME settings COMMAND test_settings)

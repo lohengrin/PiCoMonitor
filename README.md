@@ -42,7 +42,7 @@ Each build produces two firmware images:
 
 The PicoBoot image needs a PicoBoot checkout (default `../PicoBoot`, override with
 `-DPICOBOOT_DIR=...`); if it is not found the build warns and skips it. Other options:
-`-DPICOBOOT_FLASH_SIZE=<bytes>` (board flash size, default 2 MiB: CrowPanel, Pico, Pico W) and
+`-DPICOMONITOR_FLASH_SIZE=<bytes>` (board flash size, default 2 MiB: CrowPanel, Pico, Pico W) and
 `-DWITH_PICOBOOT=OFF` to disable it.
 
 ### `install_firmware` target
@@ -83,6 +83,14 @@ Both boards use the same four corner controls:
 On the Pimoroni Pico Display these are the buttons A (top-left), B (bottom-left), X (top-right), Y (bottom-right);
 on the CrowPanel touch the outer third of the screen in that corner. The page name is shown briefly after a switch.
 The Pico Display's RGB LED shows the overall status (green / orange / red; orange blinking = no signal).
+
+# Settings
+The backlight level and the page you were on are remembered across reboots and power cycles. They are stored in
+the last two flash sectors (8 KB, reserved so the firmware can never grow into them; they also survive PicoBoot
+reloading the app or flashing a new `.uf2`) and written only 3 seconds after you stop changing them, so holding the
+brightness corner doesn't wear the flash. If the saved page is an extra page (Network, System, GPU), it is shown as
+soon as the host has sent its data. The saved brightness is never below a minimum at boot, so a screen dimmed to black
+still comes back visible.
 
 # Host script
 `host_script/PiCoMonitor.py` finds the Pico by itself (USB id), on Windows, Ubuntu and Raspberry Pi OS:

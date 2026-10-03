@@ -3,6 +3,7 @@
 #include "Com.h"
 #include "OverlayWidget.h"
 #include "Pages.h"
+#include "Settings.h"
 #include "Status.h"
 #include "pico_toolset/screen.h"
 
@@ -17,11 +18,13 @@ using Board = PicoDisplayBoard;
 
 // PICO SDK
 #include "pico/stdlib.h"
+#include "pico_toolset/flash_store.h"
 
 #ifdef RASPBERRYPI_PICO_W
 	#include "pico/cyw43_arch.h"
 #endif
 
+#include <algorithm>
 #include <memory>
 #include <string.h>
 #include <cmath>
@@ -65,9 +68,23 @@ int main()
 	// Backlight dimming state (was previously tracked inside the old Screen
 	// base class; pico_toolset::Screen only exposes set_backlight(), so this
 	// small state machine lives here instead).
-	uint8_t backlight = 255;
-	uint8_t target_backlight = 255;
+	// Settings that survive a reboot (backlight level, current page), kept in the
+	// last flash sectors (reserved in CMakeLists.txt) and written only after they
+	// stop changing -- see Settings.h
+	static pico_toolset::FlashStore flashStore;
+	flashStore.init(pico_toolset::FlashStoreConfig::at_end_of_flash(PICOMONITOR_FLASH_SIZE, PICOMONITOR_SETTINGS_SECTORS));
+	static SettingsStore settingsStore(flashStore);
+	Settings settings;                       // defaults if nothing valid is stored
+	settingsStore.load(settings);
+	static SettingsSaver saver(settings, [](void* ctx, const Settings& s) { return static_cast<SettingsStore*>(ctx)->save(s); },
+	                           &settingsStore);
+
+	// Never boot into a (nearly) black screen, whatever was stored
+	constexpr uint8_t MinBootBacklight = 20;
+	uint8_t target_backlight = std::max(settings.backlight, MinBootBacklight);
+	uint8_t backlight = target_backlight;
 	board.set_backlight(backlight);
+	pages.set_preferred(static_cast<Pages::Id>(settings.page));
 
 	// The screen is only re-rendered when something changed (new data, a CPU
 	// max marker still falling, the NO SIGNAL banner toggling).
@@ -139,6 +156,12 @@ int main()
 			board.present();
 			dirty = false;
 		}
+
+		// Persist changed settings once they have settled
+		Settings wanted;
+		wanted.backlight = target_backlight;
+		wanted.page = static_cast<uint8_t>(pages.preferred());
+		saver.update(wanted, to_ms_since_boot(now));
 
 		// Manage dimming if no data
 		if (diff >= DimmingTime)

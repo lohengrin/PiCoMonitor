@@ -36,6 +36,13 @@ public:
     void prev() { step(-1); }
 
     Id current() const { return m_current; }
+
+    //! Wants `id` to be shown: switches at once if that page is available, else
+    //! as soon as it becomes available (an extra page only exists after the host
+    //! has sent its data). A user switch (next/prev) cancels a pending request.
+    void set_preferred(Id id);
+    //! The page to persist: the pending request if any, else the current page
+    Id preferred() const { return m_pending >= 0 ? static_cast<Id>(m_pending) : m_current; }
     bool available(Id id) const;
     //! "2/3 Network": position among the available pages and the page name
     std::string toast() const;
@@ -46,6 +53,7 @@ private:
 
     pico_toolset::Screen& m_screen;
     Id m_current = Overview;
+    int m_pending = -1;   // requested page not available yet (-1: none)
     bool m_seen_net = false, m_seen_system = false, m_seen_gpu = false;
 
     // Overview
