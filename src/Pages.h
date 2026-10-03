@@ -54,7 +54,8 @@ private:
     pico_toolset::Screen& m_screen;
     Id m_current = Overview;
     int m_pending = -1;   // requested page not available yet (-1: none)
-    bool m_seen_net = false, m_seen_system = false, m_seen_gpu = false;
+    bool m_seen_net = false, m_seen_system = false;
+    size_t m_gpu_count = 0;   // most GPUs seen so far (0 = the GPU page does not exist yet)
 
     // Overview
     std::unique_ptr<CPUWidget> m_cpu;
@@ -67,4 +68,7 @@ private:
     // GPU
     std::unique_ptr<GraphWidget> m_gpu_load, m_gpu_temp, m_gpu_vram;
     std::unique_ptr<InfoListWidget> m_gpu_info;
+    // GPU page with two GPUs: per GPU a load graph (top) and an info list (bottom)
+    std::unique_ptr<GraphWidget> m_gpu2_load[2];
+    std::unique_ptr<InfoListWidget> m_gpu2_info[2];
 };

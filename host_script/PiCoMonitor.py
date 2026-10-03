@@ -595,55 +595,96 @@ class RateTracker:
             return None
 
 
+_PCI_IDS_PATHS = ("/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids", "/usr/share/pci.ids")
+
+
+def _short_gpu_name(raw: str, limit: int = 24) -> str:
+    """"Cezanne [Radeon Vega Series / Radeon Vega Mobile Series]" -> "Radeon Vega Series" """
+    if "[" in raw and "]" in raw:
+        inner = raw[raw.index("[") + 1:raw.rindex("]")]
+        raw = inner.split(" / ")[0].strip() or raw
+    return raw.strip()[:limit]
+
+
+def pci_device_name(vendor: int, device: int, paths: Optional[Tuple[str, ...]] = None) -> Optional[str]:
+    """Look a PCI vendor/device id up in the system's pci.ids (Linux); None if unknown"""
+    for path in (paths if paths is not None else _PCI_IDS_PATHS):
+        try:
+            in_vendor = False
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if line.startswith("#") or not line.strip():
+                        continue
+                    if not line.startswith("\t"):                 # vendor line
+                        if in_vendor:
+                            return None                           # left the vendor without finding it
+                        in_vendor = line.split()[0].lower() == "%04x" % vendor
+                    elif in_vendor and not line.startswith("\t\t"):   # device line
+                        parts = line.strip().split(None, 1)
+                        if len(parts) == 2 and parts[0].lower() == "%04x" % device:
+                            return parts[1]
+        except OSError:
+            continue
+    return None
+
+
 class GpuMonitor:
-    """Optional GPU metrics, first provider that works wins: NVIDIA via NVML
-    (Windows/Linux, needs the NVIDIA driver) or AMD via sysfs (Linux amdgpu).
-    read() returns None where there is no supported GPU (e.g. Raspberry Pi)."""
+    """Optional GPU metrics for every GPU found: NVIDIA via NVML (Windows/Linux,
+    needs the NVIDIA driver) and AMD via sysfs (Linux amdgpu, discrete or
+    integrated). read() returns a list with one dict per GPU (NVIDIA first), or
+    None where there is no supported GPU (e.g. Raspberry Pi)."""
+
+    MAX_GPUS = 4
 
     def __init__(self):
-        self._provider: Optional[Callable[[], Optional[Dict[str, Any]]]] = None
-        self._probed = False
-        self._nvml_handle = None
+        self._readers: Optional[List[Callable[[], Optional[Dict[str, Any]]]]] = None
 
-    def read(self) -> Optional[Dict[str, Any]]:
-        if not self._probed:
-            self._probed = True
-            self._provider = self._probe()
-        if self._provider is None:
-            return None
-        try:
-            return self._provider()
-        except Exception as e:
-            logger.debug(f"GPU read failed: {e}")
-            return None
+    def read(self) -> Optional[List[Dict[str, Any]]]:
+        if self._readers is None:
+            self._readers = self._probe()
+        gpus = []
+        for reader in self._readers:
+            try:
+                gpu = reader()
+            except Exception as e:
+                logger.debug(f"GPU read failed: {e}")
+                continue
+            if gpu:
+                gpus.append(gpu)
+        return gpus or None
 
-    def _probe(self):
+    def _probe(self) -> List[Callable[[], Optional[Dict[str, Any]]]]:
+        readers: List[Callable[[], Optional[Dict[str, Any]]]] = []
         if pynvml is not None:
             try:
                 pynvml.nvmlInit()
-                if pynvml.nvmlDeviceGetCount() > 0:
-                    self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                    logger.info("GPU monitoring: NVIDIA (NVML)")
-                    return self._read_nvidia
+                for i in range(pynvml.nvmlDeviceGetCount()):
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                    readers.append(lambda h=handle: self._read_nvidia(h))
+                if readers:
+                    logger.info(f"GPU monitoring: {len(readers)} NVIDIA GPU(s) (NVML)")
             except Exception as e:
                 logger.debug(f"NVML unavailable: {e}")
         if sys.platform.startswith("linux"):
             for card in sorted(glob.glob("/sys/class/drm/card[0-9]*/device")):
+                if not re.fullmatch(r"card\d+", os.path.basename(os.path.dirname(card))):
+                    continue                                     # connectors (card1-DP-1...)
                 if os.path.exists(os.path.join(card, "gpu_busy_percent")):
-                    self._amd_dir = card
-                    logger.info(f"GPU monitoring: AMD (sysfs {card})")
-                    return self._read_amd
-        logger.info("GPU monitoring: no supported GPU found")
-        return None
+                    name = self._amd_name(card)
+                    readers.append(lambda d=card, n=name: self._read_amd(d, n))
+                    logger.info(f"GPU monitoring: AMD {name} (sysfs {card})")
+        if not readers:
+            logger.info("GPU monitoring: no supported GPU found")
+        return readers[:self.MAX_GPUS]
 
-    def _read_nvidia(self) -> Dict[str, Any]:
-        h = self._nvml_handle
-        name = pynvml.nvmlDeviceGetName(h)
+    @staticmethod
+    def _read_nvidia(handle) -> Dict[str, Any]:
+        name = pynvml.nvmlDeviceGetName(handle)
         if isinstance(name, bytes):
             name = name.decode(errors="replace")
-        util = pynvml.nvmlDeviceGetUtilizationRates(h)
-        mem = pynvml.nvmlDeviceGetMemoryInfo(h)
-        temp = pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU)
+        util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+        mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+        temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
         return {"n": name[:24], "l": float(util.gpu), "t": float(temp),
                 "mu": int(mem.used // (1024 * 1024)), "mt": int(mem.total // (1024 * 1024))}
 
@@ -651,22 +692,32 @@ class GpuMonitor:
     def _read_int(path: str) -> Optional[int]:
         try:
             with open(path) as f:
-                return int(f.read().strip())
+                return int(f.read().strip(), 0)
         except (OSError, ValueError):
             return None
 
-    def _read_amd(self) -> Dict[str, Any]:
-        d = self._amd_dir
-        load = self._read_int(os.path.join(d, "gpu_busy_percent"))
-        used = self._read_int(os.path.join(d, "mem_info_vram_used"))
-        total = self._read_int(os.path.join(d, "mem_info_vram_total"))
+    @staticmethod
+    def _amd_name(device_dir: str) -> str:
+        vendor = GpuMonitor._read_int(os.path.join(device_dir, "vendor"))
+        device = GpuMonitor._read_int(os.path.join(device_dir, "device"))
+        if vendor is not None and device is not None:
+            raw = pci_device_name(vendor, device)
+            if raw:
+                return _short_gpu_name(raw)
+        return "AMD GPU"
+
+    @staticmethod
+    def _read_amd(d: str, name: str) -> Dict[str, Any]:
+        load = GpuMonitor._read_int(os.path.join(d, "gpu_busy_percent"))
+        used = GpuMonitor._read_int(os.path.join(d, "mem_info_vram_used"))
+        total = GpuMonitor._read_int(os.path.join(d, "mem_info_vram_total"))
         temp = None
-        for hw in glob.glob(os.path.join(d, "hwmon", "hwmon*", "temp1_input")):
-            t = self._read_int(hw)
+        for hw in sorted(glob.glob(os.path.join(d, "hwmon", "hwmon*", "temp1_input"))):
+            t = GpuMonitor._read_int(hw)
             if t is not None:
                 temp = t / 1000.0
                 break
-        out: Dict[str, Any] = {"n": "AMD GPU"}
+        out: Dict[str, Any] = {"n": name}
         if load is not None: out["l"] = float(load)
         if temp is not None: out["t"] = float(temp)
         if used is not None and total:

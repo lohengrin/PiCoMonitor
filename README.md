@@ -69,7 +69,7 @@ matching data (an older host script, or a machine without e.g. a GPU, simply nev
 | Overview | RAM and temperature graphs, per-core CPU bars, disk usage bars |
 | Network | download / upload and disk read / write throughput graphs (auto-scaled) |
 | System | CPU frequency, core count, load average, swap, uptime |
-| GPU | GPU load, temperature, VRAM graphs and name (NVIDIA anywhere with the driver, AMD on Linux) |
+| GPU | GPU load, temperature, VRAM graphs and name; with two GPUs (e.g. an NVIDIA card plus an AMD iGPU) one column each: load graph plus name, temperature and VRAM. NVIDIA anywhere with the driver, AMD on Linux (amdgpu); Intel GPUs are not supported |
 
 Both boards use the same four corner controls:
 

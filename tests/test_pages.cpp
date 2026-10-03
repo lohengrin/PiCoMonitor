@@ -29,6 +29,8 @@ static const char* kNet = R"({"CPU":[1,2],"NET":[1.5,2.5]})";
 static const char* kSys = R"({"FREQ":3000,"UP":90061})";
 static const char* kGpu = R"({"GPU":{"n":"X","l":10,"t":50,"mu":1024,"mt":2048}})";
 
+static const char* kGpu2 = R"({"GPU":[{"n":"Quadro P4000","l":10,"t":38,"mu":6717,"mt":8192},{"n":"Radeon Vega Series","l":6,"t":37,"mu":1019,"mt":4096}]})";
+
 static bool drew(const Fake& d) { for (uint16_t p : d.fb) if (p) return true; return false; }
 
 static void test_availability_and_cycling() {
@@ -92,6 +94,43 @@ static void test_preferred_page() {
     CHECK(q.current() == Pages::System);
 }
 
+static size_t lit_pixels(const Fake& d, int x0, int y0, int x1, int y1) {
+    size_t n = 0;
+    for (int y = y0; y < y1; ++y) for (int x = x0; x < x1; ++x) if (d.fb[static_cast<size_t>(y) * d.w + x]) ++n;
+    return n;
+}
+
+static void test_two_gpus() {
+    Fake d(240, 135); Screen s(d); Pages p(s);
+    p.update(decode(kBasic));
+    CHECK(!p.available(Pages::Gpu));
+    p.update(decode(kGpu));                          // one GPU: the page exists, single layout
+    CHECK(p.available(Pages::Gpu));
+    p.next(); CHECK(p.current() == Pages::Gpu);
+
+    // a second GPU shows up while the page is displayed: both are drawn in columns
+    for (int i = 0; i < 20; ++i) p.update(decode(kGpu2));
+    std::fill(d.fb.begin(), d.fb.end(), 0);
+    s.update();
+    const int hw = d.w / 2, hh = d.h / 2;
+    CHECK(lit_pixels(d, 0, 0, hw, hh) > 100);        // GPU1 load graph (top-left)
+    CHECK(lit_pixels(d, hw, 0, d.w, hh) > 100);      // GPU2 load graph (top-right)
+    CHECK(lit_pixels(d, 0, hh, hw, d.h) > 50);       // GPU1 info (bottom-left)
+    CHECK(lit_pixels(d, hw, hh, d.w, d.h) > 50);     // GPU2 info (bottom-right)
+
+    // a later frame with one GPU (e.g. a read failed) keeps the two-GPU layout
+    p.update(decode(kGpu));
+    std::fill(d.fb.begin(), d.fb.end(), 0);
+    s.update();
+    CHECK(lit_pixels(d, hw, hh, d.w, d.h) > 50);
+
+    // starting directly with two GPUs
+    Fake d2(320, 240); Screen s2(d2); Pages q(s2);
+    q.update(decode(kBasic)); q.update(decode(kGpu2));
+    q.next(); CHECK(q.current() == Pages::Gpu);
+    s2.update(); CHECK(drew(d2));
+}
+
 static void test_each_page_draws() {
     Fake d(320, 240); Screen s(d); Pages p(s);
     p.update(decode(kBasic)); p.update(decode(kNet)); p.update(decode(kSys)); p.update(decode(kGpu));
@@ -120,6 +159,7 @@ static void test_tick() {
 int main() {
     test_availability_and_cycling();
     test_preferred_page();
+    test_two_gpus();
     test_each_page_draws();
     test_tick();
     if (failures) { printf("%d failure(s)\n", failures); return 1; }

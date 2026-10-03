@@ -74,26 +74,38 @@ static void test_extras() {
     CHECK(d.has_load && d.load_avg[0] == 1.77 && d.load_avg[2] == 1.14);
     CHECK(d.has_swap && d.swap == 98.5);
     CHECK(d.has_uptime && d.uptime_s == 335821);
-    CHECK(d.has_gpu && d.gpu.name == "Quadro P4000" && d.gpu.has_load && d.gpu.has_temp);
-    CHECK(d.gpu.has_vram && d.gpu.vram_used_mb == 6717 && d.gpu.vram_total_mb == 8192);
+    CHECK(d.gpus.size() == 1 && d.gpus[0].name == "Quadro P4000" && d.gpus[0].has_load && d.gpus[0].has_temp);
+    CHECK(d.gpus[0].has_vram && d.gpus[0].vram_used_mb == 6717 && d.gpus[0].vram_total_mb == 8192);
 
     // an old host sends none of them: everything stays absent
     d = decode(kSample, &ok);
-    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && !d.has_gpu);
+    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && d.gpus.empty());
 
     // odd shapes are ignored, never fatal
     d = decode(R"({"NET":[1],"IO":"x","FREQ":null,"LOAD":[1,2],"SWAP":[1],"UP":-5,"GPU":5})", &ok);
-    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && !d.has_gpu);
+    CHECK(ok && !d.has_net && !d.has_io && !d.has_freq && !d.has_load && !d.has_swap && !d.has_uptime && d.gpus.empty());
     d = decode(R"({"NET":[1,"a"],"LOAD":[1,2,"x"],"UP":1e30})", &ok);
     CHECK(ok && !d.has_net && !d.has_load && !d.has_uptime);
     // GPU with partial / missing fields (e.g. AMD without temperature)
     d = decode(R"({"GPU":{"n":"AMD GPU","l":42}})", &ok);
-    CHECK(ok && d.has_gpu && d.gpu.has_load && !d.gpu.has_temp && !d.gpu.has_vram);
+    CHECK(ok && d.gpus.size() == 1 && d.gpus[0].has_load && !d.gpus[0].has_temp && !d.gpus[0].has_vram);
     d = decode(R"({"GPU":{}})", &ok);
-    CHECK(ok && d.has_gpu && d.gpu.name.empty() && !d.gpu.has_load);
+    CHECK(ok && d.gpus.size() == 1 && d.gpus[0].name.empty() && !d.gpus[0].has_load);
     // GPU name is capped
     d = decode(R"({"GPU":{"n":"0123456789012345678901234567890123456789"}})", &ok);
-    CHECK(ok && d.gpu.name.size() == MonitorData::kMaxGpuName);
+    CHECK(ok && d.gpus[0].name.size() == MonitorData::kMaxGpuName);
+    // several GPUs (discrete + integrated): an array, order kept, capped at kMaxGpus
+    d = decode(R"({"GPU":[{"n":"Quadro P4000","l":0,"t":38,"mu":6717,"mt":8192},{"n":"Radeon Vega Series","l":6,"t":37,"mu":1019,"mt":4096}]})", &ok);
+    CHECK(ok && d.gpus.size() == 2);
+    CHECK(d.gpus[0].name == "Quadro P4000" && d.gpus[1].name == "Radeon Vega Series");
+    CHECK(d.gpus[1].has_load && d.gpus[1].load == 6 && d.gpus[1].vram_total_mb == 4096);
+    d = decode(R"({"GPU":[{"n":"A"},{"n":"B"},{"n":"C"},{"n":"D"}]})", &ok);
+    CHECK(ok && d.gpus.size() == MonitorData::kMaxGpus && d.gpus[1].name == "B");
+    // junk entries in the array are skipped
+    d = decode(R"({"GPU":[5,null,{"n":"Real"},"x"]})", &ok);
+    CHECK(ok && d.gpus.size() == 1 && d.gpus[0].name == "Real");
+    d = decode(R"({"GPU":[]})", &ok);
+    CHECK(ok && d.gpus.empty());
     // a full frame fits the firmware's frame buffer comfortably
     CHECK(strlen(kFullSample) < 1024);
 }

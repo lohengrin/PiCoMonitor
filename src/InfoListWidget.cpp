@@ -42,7 +42,14 @@ void InfoListWidget::draw(DisplayDriver& display) const {
         label.set_transparent(true);
         label.draw(display);
 
-        TextWidget value(0, ty, m_rows[i].second.c_str(), kColorWhite, kColorBlack,
+        // A value that cannot fit next to its label even at this size is shortened with ".."
+        std::string text = m_rows[i].second;
+        const int max_chars = (m_w - 2 * pad + scale) / (6 * scale);
+        const int room = max_chars - static_cast<int>(m_rows[i].first.size()) - 1;   // minus label and a gap
+        if (static_cast<int>(text.size()) > room)
+            text = room > 2 ? text.substr(0, static_cast<size_t>(room) - 2) + ".." : text.substr(0, static_cast<size_t>(std::max(room, 1)));
+
+        TextWidget value(0, ty, text.c_str(), kColorWhite, kColorBlack,
                           kGlyphFont5x8.glyphs, glyph_font_height, scale);
         value.set_transparent(true);
         value.set_position(m_x + m_w - pad - value.text_width(), ty);

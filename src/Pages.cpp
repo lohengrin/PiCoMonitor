@@ -81,6 +81,12 @@ Pages::Pages(Screen& screen) : m_screen(screen)
     m_gpu_vram = percent_graph(bl, "VRAM", Color::from_rgb888(200, 90, 255), fmt_percent);
     m_gpu_info.reset(new InfoListWidget(br.x, br.y, br.w, br.h, "GPU"));
 
+    // two GPUs: columns, load graph on top and info below
+    m_gpu2_load[0] = percent_graph(ul, "GPU1 LOAD", Color::from_rgb888(255, 130, 40), fmt_percent);
+    m_gpu2_load[1] = percent_graph(ur, "GPU2 LOAD", Color::from_rgb888(200, 90, 255), fmt_percent);
+    m_gpu2_info[0].reset(new InfoListWidget(bl.x, bl.y, bl.w, bl.h, "GPU1"));
+    m_gpu2_info[1].reset(new InfoListWidget(br.x, br.y, br.w, br.h, "GPU2"));
+
     apply();
 }
 
@@ -90,7 +96,7 @@ bool Pages::available(Id id) const
         case Overview: return true;
         case Network:  return m_seen_net;
         case System:   return m_seen_system;
-        case Gpu:      return m_seen_gpu;
+        case Gpu:      return m_gpu_count > 0;
         default:       return false;
     }
 }
@@ -132,7 +138,12 @@ void Pages::apply()
         case Overview: ul = m_ram.get();      ur = m_temp.get();      bl = m_cpu.get();       br = m_disks.get();   break;
         case Network:  ul = m_net_down.get(); ur = m_net_up.get();    bl = m_io_read.get();   br = m_io_write.get(); break;
         case System:   ul = m_system.get(); break;                    // covers the whole screen
-        case Gpu:      ul = m_gpu_load.get(); ur = m_gpu_temp.get();  bl = m_gpu_vram.get();  br = m_gpu_info.get(); break;
+        case Gpu:
+            if (m_gpu_count >= 2) { ul = m_gpu2_load[0].get(); ur = m_gpu2_load[1].get();
+                                    bl = m_gpu2_info[0].get(); br = m_gpu2_info[1].get(); }
+            else                  { ul = m_gpu_load.get(); ur = m_gpu_temp.get();
+                                    bl = m_gpu_vram.get(); br = m_gpu_info.get(); }
+            break;
         default: break;
     }
     m_screen.set_widget(Screen::UL, ul);
@@ -194,21 +205,41 @@ void Pages::update(const MonitorData& d)
         m_seen_system = true;
     }
 
-    // GPU
-    if (d.has_gpu) {
-        if (d.gpu.has_load) m_gpu_load->pushValue(d.gpu.load);
-        if (d.gpu.has_temp) m_gpu_temp->pushValue(d.gpu.temp);
-        std::vector<InfoListWidget::Row> info;
-        if (!d.gpu.name.empty())
-            info.emplace_back("GPU", d.gpu.name);
-        if (d.gpu.has_vram) {
-            m_gpu_vram->pushValue(100.0 * d.gpu.vram_used_mb / d.gpu.vram_total_mb);
-            char b[40];
-            snprintf(b, sizeof b, "%.1f/%.1f GB", d.gpu.vram_used_mb / 1024.0, d.gpu.vram_total_mb / 1024.0);
-            info.emplace_back("VRAM", b);
+    // GPU (one page: the single-GPU layout, or two columns when there are two GPUs)
+    if (!d.gpus.empty()) {
+        const size_t count = d.gpus.size();
+        const bool layout_changes = count > m_gpu_count && (count >= 2) != (m_gpu_count >= 2);
+        if (count > m_gpu_count) m_gpu_count = count;
+
+        for (size_t i = 0; i < count; ++i) {
+            const MonitorData::Gpu& g = d.gpus[i];
+
+            std::vector<InfoListWidget::Row> info;
+            if (!g.name.empty())
+                info.emplace_back("GPU", g.name);
+            if (g.has_temp)
+                info.emplace_back("Temp", format("%.0f\xC2\xB0" "C", g.temp));
+            if (g.has_vram) {
+                char b[40];
+                snprintf(b, sizeof b, "%.1f/%.1f GB", g.vram_used_mb / 1024.0, g.vram_total_mb / 1024.0);
+                info.emplace_back("VRAM", b);
+            }
+
+            if (g.has_load) m_gpu2_load[i]->pushValue(g.load);
+            m_gpu2_info[i]->setRows(info);
+
+            if (i == 0) {                      // the single-GPU layout shows the first GPU only
+                if (g.has_load) m_gpu_load->pushValue(g.load);
+                if (g.has_temp) m_gpu_temp->pushValue(g.temp);
+                if (g.has_vram) m_gpu_vram->pushValue(100.0 * g.vram_used_mb / g.vram_total_mb);
+                std::vector<InfoListWidget::Row> single;
+                if (!g.name.empty()) single.emplace_back("GPU", g.name);
+                if (g.has_vram) single.emplace_back("VRAM", info.back().second);
+                m_gpu_info->setRows(std::move(single));
+            }
         }
-        m_gpu_info->setRows(std::move(info));
-        m_seen_gpu = true;
+        if (layout_changes && m_current == Gpu)
+            apply();                           // a second GPU appeared while this page is shown
     }
 
     // A restored page that was not available at boot: show it once it is

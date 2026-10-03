@@ -156,8 +156,9 @@ The host sends one JSON object per frame (see `host_script/exemple.json`):
 
 Optional extra keys (omitted by the host when the platform cannot provide them; every one has a
 `has_*` flag in `MonitorData`): `NET` `[down, up]` KB/s, `IO` `[read, write]` KB/s, `FREQ` MHz, `LOAD`
-`[1, 5, 15]`, `SWAP` %, `UP` seconds, `GPU` `{"n": name, "l": load %, "t": temp, "mu": VRAM used MB,
-"mt": VRAM total MB}`. A full frame is ~450 bytes; the firmware's frame buffer is 2048.
+`[1, 5, 15]`, `SWAP` %, `UP` seconds, `GPU` an array with one `{"n": name, "l": load %, "t": temp, "mu": VRAM used MB,
+"mt": VRAM total MB}` per GPU (NVML devices first, then AMD sysfs cards; the firmware keeps the first
+`kMaxGpus` = 2; a single object is accepted too). With two GPUs the GPU page switches to two columns. A full frame is ~450 bytes; the firmware's frame buffer is 2048.
 
 `src/Com.cpp` polls the USB serial input (`stdio_usb`, 19200 baud, ignored by
 USB CDC) without blocking and feeds `FrameAssembler` (`src/Protocol.h`), which

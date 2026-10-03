@@ -147,10 +147,19 @@ bool decode_data(const char* json, size_t len, MonitorData& data)
             double up;
             if (number(val, up) && up >= 0 && up < 4294967295.0) { data.has_uptime = true; data.uptime_s = static_cast<uint32_t>(up); }
         }
-        else if (key == "GPU" && val.is<picojson::object>())
+        else if (key == "GPU")
         {
-            data.has_gpu = true;
-            decode_gpu(val.get<picojson::object>(), data.gpu);
+            // an array with one object per GPU (a single object is accepted too)
+            auto add = [&](const picojson::value& g) {
+                if (g.is<picojson::object>() && data.gpus.size() < MonitorData::kMaxGpus) {
+                    data.gpus.emplace_back();
+                    decode_gpu(g.get<picojson::object>(), data.gpus.back());
+                }
+            };
+            if (val.is<picojson::array>())
+                for (const auto& g : val.get<picojson::array>()) add(g);
+            else
+                add(val);
         }
         else if (key == "DISKS" && val.is<picojson::array>())
         {

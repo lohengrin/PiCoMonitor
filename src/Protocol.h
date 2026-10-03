@@ -22,6 +22,7 @@ struct MonitorData {
     static constexpr size_t kMaxCores = 64;
     static constexpr size_t kMaxDisks = 8;
     static constexpr size_t kMaxGpuName = 24;
+    static constexpr size_t kMaxGpus = 2;
 
     //! By core CPU usage (%)
     std::vector<double> cpu_percent;
@@ -50,15 +51,15 @@ struct MonitorData {
     bool   has_uptime = false;   //! seconds since boot
     uint32_t uptime_s = 0;
 
-    /// @brief GPU (NVIDIA / AMD), absent on e.g. a Raspberry Pi
+    /// @brief One GPU (NVIDIA / AMD); the host lists every GPU it finds, none on e.g. a Raspberry Pi
     struct Gpu {
         std::string name;
         bool has_load = false;  double load = 0.0;      //! %
         bool has_temp = false;  double temp = 0.0;      //! degrees
         bool has_vram = false;  double vram_used_mb = 0.0, vram_total_mb = 0.0;
     };
-    bool has_gpu = false;
-    Gpu  gpu;
+    //! The first kMaxGpus GPUs (a discrete + an integrated one, say); empty if none
+    std::vector<Gpu> gpus;
 };
 
 /// @brief Incremental frame reassembler: feed it bytes as they arrive, it
