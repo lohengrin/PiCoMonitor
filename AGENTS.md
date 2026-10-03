@@ -48,8 +48,7 @@ tests/                         host-side unit tests for the protocol layer (cmak
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
     GraphWidget.*              scrolling graph + current value (temp, RAM), wraps pico_toolset::LineGraphWidget
     DiskWidget.*               disk usage bars (pico_toolset::HBarWidget) with the full label drawn inside
-                               each bar: black over the fill, the bar color over the track
-                               (TextWidget::set_split_colors, per glyph pixel); pages rotate
+                               each bar in black; pages rotate
                                every 4 s when the disks do not all fit (tick())
     NoSignalWidget.*           "NO SIGNAL" overlay banner (Screen::FS slot, drawn last)
     picojson.h                 vendored single-header JSON parser (do not modify)
