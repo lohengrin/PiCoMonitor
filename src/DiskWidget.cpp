@@ -87,7 +87,8 @@ void DiskWidget::draw(DisplayDriver& display) const {
         const std::string text = fit_label(d.label.empty() ? "?" : d.label, bar_w - 6, scale);
         TextWidget label(bar_x + 3, cy - (8 * scale) / 2, text.c_str(), kColorWhite, kColorBlack,
                           kGlyphFont5x8.glyphs, glyph_font_height, scale);
-        label.set_invert(true);
+        // Black over the filled part, the bar's own color over the track
+        label.set_split_colors(bar_x + bar.fill_width(), kColorBlack, bar.color());
         label.draw(display);
     }
 }

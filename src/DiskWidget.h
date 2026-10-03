@@ -6,8 +6,8 @@
 #include <vector>
 
 /// @brief Per-disk usage rows: a bar (pico_toolset::HBarWidget) with the full
-/// disk label drawn inside it, in literally inverted colors so it stays legible
-/// over both the filled part and the track (including across their boundary).
+/// disk label drawn inside it: black over the filled part, in the bar's own
+/// color over the track (a glyph crossing the boundary changes color there).
 /// When more disks than fit are present, they are shown in pages that rotate
 /// automatically (see tick()).
 class DiskWidget : public pico_toolset::Widget {
