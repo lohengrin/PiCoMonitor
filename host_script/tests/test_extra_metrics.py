@@ -152,20 +152,23 @@ class TestGpuNames:
 
 class TestGpuMonitor:
     def test_no_gpu_returns_none(self):
-        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.glob.glob', return_value=[]):
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value=None), \
+                patch('PiCoMonitor.glob.glob', return_value=[]):
             gm = GpuMonitor()
             assert gm.read() is None
             assert gm.read() is None          # probed once
 
     def test_nvidia_only(self):
         nv = fake_nvml([("Quadro P4000", 37, 2048, 8192, 61)])
-        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.glob.glob', return_value=[]):
+        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.find_nvidia_smi', return_value=None), \
+                patch('PiCoMonitor.glob.glob', return_value=[]):
             assert GpuMonitor().read() == [{"n": "Quadro P4000", "l": 37.0, "t": 61.0, "mu": 2048, "mt": 8192}]
 
     def test_nvml_init_failure_falls_back_to_none(self):
         nv = Mock()
         nv.nvmlInit.side_effect = RuntimeError("no driver")
-        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.glob.glob', return_value=[]):
+        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.find_nvidia_smi', return_value=None), \
+                patch('PiCoMonitor.glob.glob', return_value=[]):
             assert GpuMonitor().read() is None
 
     def _amd_patches(self, tmp_path, dev):
@@ -178,25 +181,26 @@ class TestGpuMonitor:
                 return [str(d) for d in sorted(dev)]
             return real_glob(pattern)
         return (patch('PiCoMonitor.sys.platform', 'linux'), patch('PiCoMonitor.glob.glob', side_effect=fake_glob),
-                patch('PiCoMonitor._PCI_IDS_PATHS', (str(ids),)))
+                patch('PiCoMonitor._PCI_IDS_PATHS', (str(ids),)),
+                patch('PiCoMonitor.find_nvidia_smi', return_value=None))
 
     def test_amd_sysfs_with_friendly_name(self, tmp_path):
         dev = fake_amd_card(tmp_path, 2, 42, 1024, 4096, 55000)
-        p1, p2, p3 = self._amd_patches(tmp_path, [dev])
-        with patch('PiCoMonitor.pynvml', None), p1, p2, p3:
+        p1, p2, p3, p4 = self._amd_patches(tmp_path, [dev])
+        with patch('PiCoMonitor.pynvml', None), p1, p2, p3, p4:
             assert GpuMonitor().read() == [{"n": "Radeon Vega Series", "l": 42.0, "t": 55.0, "mu": 1024, "mt": 4096}]
 
     def test_unknown_amd_device_gets_generic_name(self, tmp_path):
         dev = fake_amd_card(tmp_path, 0, 5, 100, 512, 40000, device="0x9999")
-        p1, p2, p3 = self._amd_patches(tmp_path, [dev])
-        with patch('PiCoMonitor.pynvml', None), p1, p2, p3:
+        p1, p2, p3, p4 = self._amd_patches(tmp_path, [dev])
+        with patch('PiCoMonitor.pynvml', None), p1, p2, p3, p4:
             assert GpuMonitor().read()[0]["n"] == "AMD GPU"
 
     def test_nvidia_dgpu_and_amd_igpu_both_reported(self, tmp_path):
         dev = fake_amd_card(tmp_path, 2, 6, 1019, 4096, 37000)
         nv = fake_nvml([("Quadro P4000", 0, 6717, 8192, 38)])
-        p1, p2, p3 = self._amd_patches(tmp_path, [dev])
-        with patch('PiCoMonitor.pynvml', nv), p1, p2, p3:
+        p1, p2, p3, p4 = self._amd_patches(tmp_path, [dev])
+        with patch('PiCoMonitor.pynvml', nv), p1, p2, p3, p4:
             gpus = GpuMonitor().read()
         assert [g["n"] for g in gpus] == ["Quadro P4000", "Radeon Vega Series"]    # NVIDIA first
         assert gpus[1]["mu"] == 1019 and gpus[1]["t"] == 37.0
@@ -206,15 +210,103 @@ class TestGpuMonitor:
         conn = tmp_path / "card1-DP-1" / "device"
         conn.mkdir(parents=True)
         (conn / "gpu_busy_percent").write_text("0\n")          # even if it looked like a GPU
-        p1, p2, p3 = self._amd_patches(tmp_path, [card, conn])
-        with patch('PiCoMonitor.pynvml', None), p1, p2, p3:
+        p1, p2, p3, p4 = self._amd_patches(tmp_path, [card, conn])
+        with patch('PiCoMonitor.pynvml', None), p1, p2, p3, p4:
             assert len(GpuMonitor().read()) == 1
 
     def test_one_failing_gpu_does_not_hide_the_other(self, tmp_path):
         dev = fake_amd_card(tmp_path, 2, 6, 1019, 4096, 37000)
         nv = fake_nvml([("Quadro P4000", 0, 6717, 8192, 38)])
         nv.nvmlDeviceGetTemperature.side_effect = RuntimeError("GPU fell off the bus")
-        p1, p2, p3 = self._amd_patches(tmp_path, [dev])
-        with patch('PiCoMonitor.pynvml', nv), p1, p2, p3:
+        p1, p2, p3, p4 = self._amd_patches(tmp_path, [dev])
+        with patch('PiCoMonitor.pynvml', nv), p1, p2, p3, p4:
             gpus = GpuMonitor().read()
         assert [g["n"] for g in gpus] == ["Radeon Vega Series"]
+
+
+SMI_OUTPUT = "Quadro P4000, 12, 41, 6633, 8192\n"
+
+
+def fake_smi(stdout=SMI_OUTPUT, returncode=0):
+    return patch('PiCoMonitor.subprocess.run',
+                 return_value=SimpleNamespace(stdout=stdout, returncode=returncode))
+
+
+class TestNvidiaSmiFallback:
+    def test_parse(self):
+        assert PiCoMonitor.parse_nvidia_smi(SMI_OUTPUT) == [
+            {"n": "Quadro P4000", "l": 12.0, "t": 41.0, "mu": 6633, "mt": 8192}]
+        two = "GPU A, 1, 30, 100, 1000\nGPU B, 2, 31, 200, 2000\n"
+        assert [g["n"] for g in PiCoMonitor.parse_nvidia_smi(two)] == ["GPU A", "GPU B"]
+
+    def test_parse_unavailable_fields_and_junk(self):
+        out = PiCoMonitor.parse_nvidia_smi("Laptop GPU, [N/A], 55, [N/A], [N/A]\n\nnot,enough\n, 1, 2, 3, 4\n")
+        assert out == [{"n": "Laptop GPU", "t": 55.0}]          # missing values omitted, junk lines skipped
+        assert PiCoMonitor.parse_nvidia_smi("") == []
+        assert len(PiCoMonitor.parse_nvidia_smi("X" * 60 + ", 1, 2, 3, 4")[0]["n"]) == 24
+
+    def test_used_when_nvml_is_not_installed(self):
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value="/usr/bin/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), fake_smi():
+            assert GpuMonitor().read() == [{"n": "Quadro P4000", "l": 12.0, "t": 41.0, "mu": 6633, "mt": 8192}]
+
+    def test_nvml_preferred_over_smi(self):
+        nv = fake_nvml([("Quadro P4000", 37, 2048, 8192, 61)])
+        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.find_nvidia_smi', return_value="/usr/bin/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), patch('PiCoMonitor.subprocess.run') as run:
+            assert GpuMonitor().read()[0]["l"] == 37.0
+            run.assert_not_called()
+
+    def test_smi_used_when_nvml_init_fails(self):
+        nv = Mock()
+        nv.nvmlInit.side_effect = RuntimeError("driver/library mismatch")
+        with patch('PiCoMonitor.pynvml', nv), patch('PiCoMonitor.find_nvidia_smi', return_value="/usr/bin/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), fake_smi():
+            assert GpuMonitor().read()[0]["n"] == "Quadro P4000"
+
+    def test_output_is_cached_between_polls(self):
+        clock = FakeClock()
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value="/x/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), fake_smi() as run:
+            gm = GpuMonitor(clock)
+            gm.read()                                   # the probe call doubles as the first sample
+            calls_after_first = run.call_count
+            assert calls_after_first == 1
+            clock.t += 0.5
+            gm.read(); gm.read()
+            assert run.call_count == calls_after_first  # within SMI_CACHE_S: no new process
+            clock.t += GpuMonitor.SMI_CACHE_S
+            gm.read()
+            assert run.call_count == calls_after_first + 1
+
+    def test_failed_call_keeps_last_values(self):
+        clock = FakeClock()
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value="/x/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), fake_smi():
+            gm = GpuMonitor(clock)
+            first = gm.read()
+            clock.t += 10
+            with patch('PiCoMonitor.subprocess.run', side_effect=OSError("boom")):
+                assert gm.read() == first               # keeps the previous values
+
+    def test_smi_errors_mean_no_gpu(self):
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value="/x/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), fake_smi("", returncode=9):
+            assert GpuMonitor().read() is None
+        with patch('PiCoMonitor.pynvml', None), patch('PiCoMonitor.find_nvidia_smi', return_value="/x/nvidia-smi"), \
+                patch('PiCoMonitor.glob.glob', return_value=[]), \
+                patch('PiCoMonitor.subprocess.run', side_effect=PiCoMonitor.subprocess.TimeoutExpired("nvidia-smi", 3)):
+            assert GpuMonitor().read() is None
+
+    def test_windows_hides_the_console_window(self):
+        with patch('PiCoMonitor.sys.platform', 'win32'), patch('PiCoMonitor.pynvml', None), \
+                patch('PiCoMonitor.find_nvidia_smi', return_value="C:\\nvidia-smi.exe"), \
+                patch('PiCoMonitor.subprocess.CREATE_NO_WINDOW', 0x08000000, create=True), fake_smi() as run:
+            GpuMonitor().read()
+            assert run.call_args.kwargs.get("creationflags") == 0x08000000
+
+    def test_find_nvidia_smi(self):
+        with patch('PiCoMonitor.shutil.which', return_value="/usr/bin/nvidia-smi"):
+            assert PiCoMonitor.find_nvidia_smi() == "/usr/bin/nvidia-smi"
+        with patch('PiCoMonitor.shutil.which', return_value=None), patch('PiCoMonitor.os.path.isfile', return_value=False):
+            assert PiCoMonitor.find_nvidia_smi() is None

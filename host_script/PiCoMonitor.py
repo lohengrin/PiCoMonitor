@@ -11,6 +11,8 @@ import argparse
 import re
 import threading
 import glob
+import shutil
+import subprocess
 from types import SimpleNamespace
 try:
     import pystray
@@ -628,55 +630,150 @@ def pci_device_name(vendor: int, device: int, paths: Optional[Tuple[str, ...]] =
     return None
 
 
+def find_nvidia_smi() -> Optional[str]:
+    """nvidia-smi ships with the NVIDIA driver (Windows and Linux)"""
+    path = shutil.which("nvidia-smi")
+    if path:
+        return path
+    for p in (r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe", r"C:\Windows\System32\nvidia-smi.exe"):
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def parse_nvidia_smi(text: str) -> List[Dict[str, Any]]:
+    """Parse `nvidia-smi --query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total
+    --format=csv,noheader,nounits` (one line per GPU; fields may be "[N/A]")"""
+    def num(field: str) -> Optional[float]:
+        try:
+            return float(field.strip())
+        except ValueError:
+            return None
+
+    gpus = []
+    for line in text.splitlines():
+        fields = [f.strip() for f in line.split(",")]
+        if len(fields) < 5 or not fields[0]:
+            continue
+        gpu: Dict[str, Any] = {"n": fields[0][:24]}
+        load, temp, used, total = num(fields[1]), num(fields[2]), num(fields[3]), num(fields[4])
+        if load is not None: gpu["l"] = load
+        if temp is not None: gpu["t"] = temp
+        if used is not None and total:
+            gpu["mu"] = int(used)
+            gpu["mt"] = int(total)
+        gpus.append(gpu)
+    return gpus
+
+
 class GpuMonitor:
-    """Optional GPU metrics for every GPU found: NVIDIA via NVML (Windows/Linux,
-    needs the NVIDIA driver) and AMD via sysfs (Linux amdgpu, discrete or
-    integrated). read() returns a list with one dict per GPU (NVIDIA first), or
-    None where there is no supported GPU (e.g. Raspberry Pi)."""
+    """Optional GPU metrics for every GPU found. Sources, in this order:
+      * NVIDIA via NVML (`pip install nvidia-ml-py`; Windows/Linux, needs the NVIDIA driver),
+        else via `nvidia-smi` (ships with the driver, no Python package needed; polled at most
+        every SMI_CACHE_S seconds because it starts a process);
+      * AMD via sysfs (Linux amdgpu, discrete or integrated).
+    read() returns a list with one dict per GPU (NVIDIA first), or None where there is no
+    supported GPU (e.g. Raspberry Pi)."""
 
     MAX_GPUS = 4
+    SMI_CACHE_S = 2.0
 
-    def __init__(self):
-        self._readers: Optional[List[Callable[[], Optional[Dict[str, Any]]]]] = None
+    def __init__(self, clock: Callable[[], float] = time.monotonic):
+        self._clock = clock
+        self._sources: Optional[List[Callable[[], List[Dict[str, Any]]]]] = None
+        self._smi_path: Optional[str] = None
+        self._smi_cache: List[Dict[str, Any]] = []
+        self._smi_time = float("-inf")
 
     def read(self) -> Optional[List[Dict[str, Any]]]:
-        if self._readers is None:
-            self._readers = self._probe()
-        gpus = []
-        for reader in self._readers:
+        if self._sources is None:
+            self._sources = self._probe()
+        gpus: List[Dict[str, Any]] = []
+        for source in self._sources:
             try:
-                gpu = reader()
+                gpus.extend(source())
             except Exception as e:
-                logger.debug(f"GPU read failed: {e}")
-                continue
-            if gpu:
-                gpus.append(gpu)
-        return gpus or None
+                logger.debug(f"GPU source failed: {e}")
+        return gpus[:self.MAX_GPUS] or None
 
-    def _probe(self) -> List[Callable[[], Optional[Dict[str, Any]]]]:
-        readers: List[Callable[[], Optional[Dict[str, Any]]]] = []
-        if pynvml is not None:
-            try:
-                pynvml.nvmlInit()
-                for i in range(pynvml.nvmlDeviceGetCount()):
-                    handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-                    readers.append(lambda h=handle: self._read_nvidia(h))
-                if readers:
-                    logger.info(f"GPU monitoring: {len(readers)} NVIDIA GPU(s) (NVML)")
-            except Exception as e:
-                logger.debug(f"NVML unavailable: {e}")
+    # ---- probing -------------------------------------------------------------------------------
+    def _probe(self) -> List[Callable[[], List[Dict[str, Any]]]]:
+        sources: List[Callable[[], List[Dict[str, Any]]]] = []
+
+        nvidia = self._probe_nvml() or self._probe_smi()
+        if nvidia:
+            sources.append(nvidia)
+
         if sys.platform.startswith("linux"):
             for card in sorted(glob.glob("/sys/class/drm/card[0-9]*/device")):
                 if not re.fullmatch(r"card\d+", os.path.basename(os.path.dirname(card))):
                     continue                                     # connectors (card1-DP-1...)
                 if os.path.exists(os.path.join(card, "gpu_busy_percent")):
                     name = self._amd_name(card)
-                    readers.append(lambda d=card, n=name: self._read_amd(d, n))
+                    sources.append(lambda d=card, n=name: [self._read_amd(d, n)])
                     logger.info(f"GPU monitoring: AMD {name} (sysfs {card})")
-        if not readers:
+        if not sources:
             logger.info("GPU monitoring: no supported GPU found")
-        return readers[:self.MAX_GPUS]
+        return sources
 
+    def _probe_nvml(self):
+        if pynvml is None:
+            return None
+        try:
+            pynvml.nvmlInit()
+            handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in range(pynvml.nvmlDeviceGetCount())]
+        except Exception as e:
+            logger.debug(f"NVML unavailable: {e}")
+            return None
+        if not handles:
+            return None
+        logger.info(f"GPU monitoring: {len(handles)} NVIDIA GPU(s) (NVML)")
+
+        def read_all() -> List[Dict[str, Any]]:
+            out = []
+            for h in handles:
+                try:                      # one GPU failing must not hide the others
+                    out.append(self._read_nvidia(h))
+                except Exception as e:
+                    logger.debug(f"NVML read failed: {e}")
+            return out
+        return read_all
+
+    def _probe_smi(self):
+        path = find_nvidia_smi()
+        if path is None:
+            return None
+        self._smi_path = path
+        gpus = self._run_smi()
+        if not gpus:
+            return None
+        self._smi_cache, self._smi_time = gpus, self._clock()      # the probe call is the first sample
+        logger.info(f"GPU monitoring: {len(gpus)} NVIDIA GPU(s) via nvidia-smi"
+                    + ("" if pynvml else " (install nvidia-ml-py for lower overhead: pip install nvidia-ml-py)"))
+        return self._read_smi
+
+    def _run_smi(self) -> List[Dict[str, Any]]:
+        kwargs: Dict[str, Any] = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # no console flash
+        try:
+            res = subprocess.run(
+                [self._smi_path, "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3, **kwargs)
+            return parse_nvidia_smi(res.stdout) if res.returncode == 0 else []
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.debug(f"nvidia-smi failed: {e}")
+            return []
+
+    def _read_smi(self) -> List[Dict[str, Any]]:
+        now = self._clock()
+        if now - self._smi_time >= self.SMI_CACHE_S:
+            self._smi_time = now
+            self._smi_cache = self._run_smi() or self._smi_cache   # keep the last values on a failed call
+        return self._smi_cache
+
+    # ---- readers -------------------------------------------------------------------------------
     @staticmethod
     def _read_nvidia(handle) -> Dict[str, Any]:
         name = pynvml.nvmlDeviceGetName(handle)
