@@ -16,6 +16,22 @@ enum Corner : uint8_t {
     CornerBottomRight = 1 << 3,
 };
 
+/// @brief Corner zone containing a pixel position (touch boards): each corner
+/// is the outer third of both axes; the rest of the screen is no corner.
+/// @return the Corner bit, or 0
+inline uint8_t corner_at(int x, int y, int width, int height)
+{
+    const bool left   = x < width / 3;
+    const bool right  = x >= width - width / 3;
+    const bool top    = y < height / 3;
+    const bool bottom = y >= height - height / 3;
+    if (top && left)     return CornerTopLeft;
+    if (bottom && left)  return CornerBottomLeft;
+    if (top && right)    return CornerTopRight;
+    if (bottom && right) return CornerBottomRight;
+    return 0;
+}
+
 /// @brief Turns "which corners are held" into press events with auto-repeat:
 /// a corner fires when first pressed, again after kRepeatMs while held, and
 /// three times faster once held longer than kHoldMs (the behavior of the

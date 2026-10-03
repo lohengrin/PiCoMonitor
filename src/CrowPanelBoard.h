@@ -22,16 +22,15 @@ public:
 
     void set_backlight(uint8_t val) { m_lcd.set_backlight(val); }
 
-    //! Touch and SD card are brought up (mounted) in the constructor but not
-    //! polled/read by the main loop yet -- exposed here for whoever adds
-    //! that next (e.g. touch-to-wake, or reading a background image/config
-    //! off the uSD card).
+    //! Touch is read by poll_input() (corner zones); the SD card is mounted in
+    //! the constructor but not used yet -- exposed here for whoever adds that
+    //! next (e.g. a config file or background image on the uSD card).
     pico_toolset::Xpt2046Touch& touch() { return m_touch; }
     pico_toolset::SdCard& sd() { return m_sd; }
 
-    //! Corners fired this call (see Input.h). Touch corner zones are not wired
-    //! up yet (they need a measured touch calibration for this panel).
-    uint8_t poll_input() { return 0; }
+    //! Corners fired this call (see Input.h): touching the outer third of both
+    //! axes in a screen corner, with press + auto-repeat. Call once per loop.
+    uint8_t poll_input();
     //! This board has no status LED.
     void set_status(Status) {}
     void tick() {}
@@ -46,4 +45,7 @@ private:
     pico_toolset::BufferedDisplay m_driver;
     pico_toolset::Xpt2046Touch m_touch;
     pico_toolset::SdCard m_sd;
+    RepeatFilter m_repeat;
+    uint8_t m_zone = 0;     // corner currently touched (debounced)
+    int m_zone_frames = 0;  // consecutive polls the same corner was seen
 };

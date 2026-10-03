@@ -183,9 +183,9 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   auto-repeat via `RepeatFilter`); `PiCoMonitor.cpp` maps them to actions in one
   place: top-left = backlight up, bottom-left = backlight down; top-right /
   bottom-right are reserved for page switching. Pico Display Pack: buttons
-  A/B/X/Y are TL/BL/TR/BR. CrowPanel: touch corner zones (not implemented yet:
-  needs a measured touch calibration for this panel, see the board doc in
-  pico-toolset).
+  A/B/X/Y are TL/BL/TR/BR. CrowPanel: touching the outer third of both axes in a
+  screen corner (`corner_at()`), using the toolset's CrowPanel touch
+  calibration (`kElecrowCrowPanelPicoHmi28Calibration`).
 - Status: `computeStatus()` (`Status.h`) turns each frame into Ok/Warning/
   Critical (average CPU 70/90 %, RAM 80/95 %, temperature 70/85 degrees, any
   disk 90/97 %); the Pico Display Pack's RGB LED shows it (green/orange/red,

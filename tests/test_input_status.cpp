@@ -39,6 +39,20 @@ static void test_repeat() {
       CHECK(r.update(CornerTopLeft, t + 0x150) == CornerTopLeft); }
 }
 
+static void test_corners() {
+    const int W = 320, H = 240;
+    CHECK(corner_at(0, 0, W, H) == CornerTopLeft);
+    CHECK(corner_at(105, 79, W, H) == CornerTopLeft);          // last pixel of the zone
+    CHECK(corner_at(106, 79, W, H) == 0);                      // outside in x
+    CHECK(corner_at(105, 80, W, H) == 0);                      // outside in y
+    CHECK(corner_at(0, 239, W, H) == CornerBottomLeft);
+    CHECK(corner_at(319, 0, W, H) == CornerTopRight);
+    CHECK(corner_at(319, 239, W, H) == CornerBottomRight);
+    CHECK(corner_at(160, 120, W, H) == 0);                     // centre
+    CHECK(corner_at(160, 0, W, H) == 0);                       // top middle
+    CHECK(corner_at(0, 120, W, H) == 0);                       // left middle
+}
+
 static MonitorData frame(double cpu, bool has_ram, double ram, bool has_temp, double temp, double disk_pct) {
     MonitorData d;
     d.cpu_percent = {cpu, cpu};
@@ -68,6 +82,7 @@ static void test_status() {
 
 int main() {
     test_repeat();
+    test_corners();
     test_status();
     if (failures) { printf("%d failure(s)\n", failures); return 1; }
     printf("all input/status tests passed\n");
