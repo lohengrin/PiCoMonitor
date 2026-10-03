@@ -1,7 +1,7 @@
 #pragma once
 
 #include "pico_toolset/widget.h"
-#include "Com.h"
+#include "Protocol.h"
 
 #include <vector>
 

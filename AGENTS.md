@@ -39,7 +39,10 @@ third_party/pico-toolset/      git submodule: shared drivers + Screen/Widget com
                                 (pico_toolset::St7789/Xpt2046Touch/SdCard/Screen/Widget/...)
 src/
     PiCoMonitor.cpp            main loop: serial read, JSON decode, widget render, dimming
-    Com.h / Com.cpp            USB serial reading + JSON decoding (picojson)
+    Protocol.h / Protocol.cpp  pure-C++ protocol layer (no Pico SDK): MonitorData, FrameAssembler
+                               (incremental frame reassembly), decode_data() (picojson, type-safe)
+    Com.h / Com.cpp            poll_frame(): non-blocking USB serial read -> FrameAssembler -> decode
+tests/                         host-side unit tests for the protocol layer (cmake -S tests ...)
     CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
     PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RGB LED + buttons
     CPUWidget.*                per-core CPU bars, composed from pico_toolset::BarWidget
@@ -86,8 +89,12 @@ make
   `install/`, named `PiCoMonitor-<crowpanel|picodisplay>-<PICO_BOARD>-<build type>[.picoboot].<ext>`.
 - `.vscode/` is configured for CMake + cortex-debug.
 
-There is no automated test or lint step for the C++ side; correctness is verified by
-building for both board options.
+C++ tests: the protocol layer is unit-tested on the host (ASan/UBSan):
+```
+cmake -S tests -B build-tests && cmake --build build-tests && ctest --test-dir build-tests --output-on-failure
+```
+Everything else on the firmware side is verified by building both board options.
+Keep `Protocol.*` free of Pico SDK includes so it stays host-testable.
 
 ## Host script
 
@@ -118,9 +125,13 @@ The host sends one JSON object per frame (see `host_script/exemple.json`):
 }
 ```
 
-`src/Com.cpp` (re)discovers frames by brace nesting on the USB serial input
-(`stdio_usb`, 19200 baud) and decodes with picojson into `MonitorData`
-(`src/Com.h`). The baud rate lives in `host_script/PiCoMonitor.py` (`Config.BAUD_RATE`).
+`src/Com.cpp` polls the USB serial input (`stdio_usb`, 19200 baud, ignored by
+USB CDC) without blocking and feeds `FrameAssembler` (`src/Protocol.h`), which
+tolerates any chunking, garbage between frames and braces inside strings, and
+drops a half-received frame after 200 ms of silence. `decode_data()` never aborts
+on odd JSON: wrongly-typed/null values are ignored, `MonitorData::has_temp`/
+`has_ram` say whether those values were present (the main loop only pushes graph
+points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The baud rate lives in `host_script/PiCoMonitor.py` (`Config.BAUD_RATE`).
 
 ## Conventions
 

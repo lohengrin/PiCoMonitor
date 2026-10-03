@@ -38,6 +38,8 @@ ENDIF()
 # Firmware sources, shared by the standalone image and the PicoBoot image
 set(PICOMONITOR_SRC
 src/picojson.h
+src/Protocol.h
+src/Protocol.cpp
 src/Com.h
 src/Com.cpp
 src/CPUWidget.h

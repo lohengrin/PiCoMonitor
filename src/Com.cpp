@@ -1,80 +1,37 @@
 #include "Com.h"
-#include "picojson.h"
 
-#include <algorithm>
+#include "pico/stdlib.h"
 
-// Read json form first { to last }
-uint16_t get_data(char *buffer, size_t size)
+namespace {
+
+constexpr size_t kFrameBufferSize = 1024;
+//! A frame is written by the host in one go: if bytes stop arriving this long
+//! mid-frame, the rest was lost -- drop it and resynchronise.
+constexpr int64_t kFrameTimeoutUs = 200000;
+
+char s_buffer[kFrameBufferSize];
+FrameAssembler s_assembler(s_buffer, kFrameBufferSize);
+absolute_time_t s_last_byte;
+
+} // namespace
+
+bool poll_frame(MonitorData& data)
 {
-	uint16_t buffer_index = 0;
-	int level = 0;
+    const absolute_time_t now = get_absolute_time();
+    if (s_assembler.in_frame() && absolute_time_diff_us(s_last_byte, now) > kFrameTimeoutUs)
+        s_assembler.reset();
 
-	do {
-		int c = getchar_timeout_us(1000);
-		if (c == PICO_ERROR_TIMEOUT)
-			return 0;
+    for (;;)
+    {
+        int c = getchar_timeout_us(0);
+        if (c == PICO_ERROR_TIMEOUT)
+            return false;
 
-		if (c == '{')
-			level++;
-		else if (c == '}')
-			level--;
-
-		buffer[buffer_index++] = (c & 0xFF);
-	} while (level>0 && (buffer_index < size - 1));
-
-    buffer[buffer_index] = 0;
-
-    return buffer_index;
-}
-
-bool decode_data(char *buffer, size_t bufsize, MonitorData& data)
-{
-	picojson::value v;
-	std::string err = picojson::parse(v, std::string(buffer));
-	if (! err.empty()) return false;
-	if (! v.is<picojson::object>()) return false;
-
-	const auto& obj = v.get<picojson::object>();
-	for (auto&& i = obj.begin(); i != obj.end(); ++i) 
-	{
-		if (i->first == "CPU" && i->second.is<picojson::array>())
-		{
-			const auto& arr = i->second.get<picojson::array>();
-			for (auto&& j = arr.begin(); j != arr.end(); ++j) 
-				data.cpu_percent.push_back(j->get<double>());
-		}
-		else if (i->first == "TEMP")
-		{
-			data.temp = i->second.get<double>();
-		}
-		else if (i->first == "RAM")
-		{
-			data.ram = i->second.get<double>();
-		}
-		else if (i->first == "DISKS" && i->second.is<picojson::array>())
-		{
-			const auto& arr = i->second.get<picojson::array>();
-			for (auto&& j = arr.begin(); j != arr.end(); ++j)
-			{
-				MonitorData::DiskData ddata;
-
-				const auto& dobj = j->get<picojson::object>();
-				for (auto&& d = dobj.begin(); d != dobj.end(); ++d) 
-				{
-
-					if (d->first == "path")
-						ddata.label = d->second.get<std::string>();
-					else if (d->first == "total")
-						ddata.total = d->second.get<double>();
-					else if (d->first == "used")
-						ddata.used = d->second.get<double>();
-				}
-
-				data.disks.push_back(ddata);
-			}
-		}
-
-	}
-
-	return true;
+        s_last_byte = get_absolute_time();
+        if (s_assembler.feed(static_cast<char>(c)))
+        {
+            data = MonitorData();
+            return decode_data(s_assembler.buffer(), s_assembler.length(), data);
+        }
+    }
 }

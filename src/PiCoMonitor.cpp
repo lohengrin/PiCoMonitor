@@ -26,8 +26,6 @@ using Board = PicoDisplayBoard;
 #include <string.h>
 #include <cmath>
 
-#define BUFFER_LENGTH 512
-
 using namespace pico_toolset;
 
 #define PERIOD_US 10000  // 100 Hz
@@ -83,10 +81,6 @@ int main()
 	screen.update();
 	board.present();
 
-	// Communication buffer
-	char buffer[BUFFER_LENGTH];
-	memset(buffer, 0, BUFFER_LENGTH);
-
 	absolute_time_t  nextStep = delayed_by_us(get_absolute_time(),PERIOD_US);
 	absolute_time_t  lastUpdate = get_absolute_time();
 	while (true)
@@ -94,23 +88,20 @@ int main()
 		// Platform hooks (button polling, LED feedback...)
 		board.poll_buttons(target_backlight);
 
-		// Read next message
-		uint16_t len = get_data(buffer, BUFFER_LENGTH);
-		if (len > 0) // Message is received
+		// Poll the serial input; a complete valid frame updates the widgets
+		MonitorData data;
+		if (poll_frame(data))
 		{
-			// Decode JSON data
-			MonitorData data;
-			if (!decode_data(buffer, len, data))
-				continue;
-
 			// Platform hook (LED color cycling)
 			board.on_data_received();
 
 			// Update widget data
 			cpu->setValues(data.cpu_percent);
-			temp->pushValue(data.temp);
+			if (data.has_temp)
+				temp->pushValue(data.temp);
 			disks->setValues(data.disks);
-			ram->pushValue(data.ram);
+			if (data.has_ram)
+				ram->pushValue(data.ram);
 
 			lastUpdate = get_absolute_time();
 		}
