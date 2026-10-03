@@ -147,7 +147,15 @@ IF(WITH_PICOBOOT)
         add_executable(PiCoMonitor_picoboot ${PICOMONITOR_SRC})
         set_target_properties(PiCoMonitor_picoboot PROPERTIES OUTPUT_NAME PiCoMonitor.picoboot)
         include(${PICOBOOT_DIR}/cmake/picoboot_app_linker.cmake)
-        picoboot_set_app_flash_region(PiCoMonitor_picoboot ${PICOMONITOR_APP_FLASH_SIZE})   # also keeps the settings sectors free
+        include(${PICOBOOT_DIR}/cmake/picoboot_flash_layout.cmake)   # PICOBOOT_BOOT_RESERVE_SIZE, PICOBOOT_APP_FLASH_ORIGIN
+        # The helper must get the REAL flash size: it becomes PICO_FLASH_SIZE_BYTES, which the SDK's
+        # flash_range_erase/program hard_assert against -- passing a smaller value (to keep the settings
+        # sectors free) made the first settings save panic. Shrink the linker region ourselves instead,
+        # overwriting the linker script the helper just generated.
+        picoboot_set_app_flash_region(PiCoMonitor_picoboot ${PICOMONITOR_FLASH_SIZE})
+        math(EXPR PICOMONITOR_PB_APP_LENGTH "${PICOMONITOR_APP_FLASH_SIZE} - ${PICOBOOT_BOOT_RESERVE_SIZE}")
+        file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/PiCoMonitor_picoboot/pico_flash_region.ld
+             "FLASH(rx) : ORIGIN = ${PICOBOOT_APP_FLASH_ORIGIN}, LENGTH = ${PICOMONITOR_PB_APP_LENGTH}\n")
         picomonitor_configure(PiCoMonitor_picoboot)   # -> PiCoMonitor.picoboot.bin
     ELSE()
         message(WARNING "PicoBoot not found at ${PICOBOOT_DIR} (set PICOBOOT_DIR): skipping PiCoMonitor.picoboot.bin")

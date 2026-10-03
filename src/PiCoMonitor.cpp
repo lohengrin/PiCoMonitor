@@ -31,6 +31,12 @@ using Board = PicoDisplayBoard;
 
 using namespace pico_toolset;
 
+// The SDK's flash_range_erase/program hard_assert(offset + size <= PICO_FLASH_SIZE_BYTES): the settings
+// sectors at the end of flash must be inside it (a smaller value, e.g. from a bootloader helper, would
+// panic at the first save)
+static_assert(PICO_FLASH_SIZE_BYTES >= PICOMONITOR_FLASH_SIZE,
+              "PICO_FLASH_SIZE_BYTES must cover the settings sectors at the end of flash");
+
 #define PERIOD_US 10000  // 100 Hz
 
 static const int64_t DimmingTime = 5000000; // 5 seconds

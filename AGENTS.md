@@ -200,9 +200,11 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   buffer. After adding locals to `main()`, re-check its frame (`sub sp` in `objdump -d`, now ~420 bytes).
 - Settings persist in the **last 2 flash sectors** (`PICOMONITOR_SETTINGS_SECTORS`,
   pico_toolset `FlashStore`, CRC'd append-only records, erase only every 16 saves). `CMakeLists.txt`
-  shortens the firmware's FLASH region by that reserve (standalone: generated
-  `pico_flash_region.ld`; PicoBoot image: smaller size passed to `picoboot_set_app_flash_region`),
-  so a firmware that grows into it fails at link time. To persist another value: add a field at the END
+  shortens the firmware's FLASH region by that reserve (both images: a generated
+  `pico_flash_region.ld`), so a firmware that grows into it fails at link time. **`PICO_FLASH_SIZE_BYTES`
+  must stay the real flash size**: the SDK `hard_assert`s every `flash_range_erase/program` against it, so
+  passing PicoBoot's `picoboot_set_app_flash_region` a smaller size (an earlier attempt) made the first
+  save panic -- i.e. freeze -- in the PicoBoot image only. A `static_assert` in `PiCoMonitor.cpp` guards it. To persist another value: add a field at the END
   of `Settings` and handle the new version in `Settings::deserialize` (old records must stay readable).
   Flash writes halt execution for a few ms (interrupts off): never save per-frame, only via
   `SettingsSaver`. Core1 is not used; `FlashStore` assumes that (see its header).
