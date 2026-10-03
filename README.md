@@ -87,7 +87,7 @@ The Pico Display's RGB LED shows the overall status (green / orange / red; orang
 # Settings
 The backlight level and the page you were on are remembered across reboots and power cycles. They are stored in
 the last two flash sectors (8 KB, reserved so the firmware can never grow into them; they also survive PicoBoot
-reloading the app or flashing a new `.uf2`) and written only 3 seconds after you stop changing them, so holding the
+reloading the app or flashing a new `.uf2`) and written only 30 seconds after you stop changing them, so holding the
 brightness corner doesn't wear the flash. If the saved page is an extra page (Network, System, GPU), it is shown as
 soon as the host has sent its data. The saved brightness is never below a minimum at boot, so a screen dimmed to black
 still comes back visible.

@@ -192,51 +192,55 @@ struct Saves { int count = 0; Settings last; bool ok = true; };
 static bool save_cb(void* ctx, const Settings& s) { auto* c = static_cast<Saves*>(ctx); c->count++; c->last = s; return c->ok; }
 
 static void test_saver() {
+    const uint32_t S = SettingsSaver::kSettleMs;      // settle time under test
     Saves saves;
     Settings stored; stored.backlight = 255; stored.page = 0;
     SettingsSaver saver(stored, save_cb, &saves);
 
     Settings w = stored;
-    saver.update(w, 0); saver.update(w, 10000);
+    saver.update(w, 0); saver.update(w, 10 * S);
     CHECK(saves.count == 0);                          // unchanged: never written
 
+    const uint32_t t0 = 20 * S;
     w.backlight = 200;
-    saver.update(w, 20000);                           // change: timer starts
-    saver.update(w, 22999);
+    saver.update(w, t0);                              // change: timer starts
+    saver.update(w, t0 + S - 1);
     CHECK(saves.count == 0);
     w.backlight = 190;                                // still changing (holding the button): timer restarts
-    saver.update(w, 23000);
-    saver.update(w, 25999);
+    saver.update(w, t0 + S);
+    saver.update(w, t0 + 2 * S - 1);
     CHECK(saves.count == 0);
-    saver.update(w, 26000);                           // settled for 3 s
+    saver.update(w, t0 + 2 * S);                      // settled for a full settle time
     CHECK(saves.count == 1 && saves.last.backlight == 190);
-    saver.update(w, 40000);
+    saver.update(w, t0 + 10 * S);
     CHECK(saves.count == 1);                          // nothing more to store
 
     // change and revert before settling: nothing is written
-    w.page = 2; saver.update(w, 50000);
-    w.page = 0; w.backlight = 190; saver.update(w, 50100);
-    saver.update(w, 60000);
+    const uint32_t t1 = t0 + 20 * S;
+    w.page = 2; saver.update(w, t1);
+    w.page = 0; w.backlight = 190; saver.update(w, t1 + 100);
+    saver.update(w, t1 + 10 * S);
     CHECK(saves.count == 1);
 
     // write failure: retried after another settle period
+    const uint32_t t2 = t1 + 20 * S;
     saves.ok = false;
-    w.page = 1; saver.update(w, 70000);
-    saver.update(w, 73000);
+    w.page = 1; saver.update(w, t2);
+    saver.update(w, t2 + S);
     CHECK(saves.count == 2);                          // attempt failed
-    saver.update(w, 75999);
+    saver.update(w, t2 + 2 * S - 1);
     CHECK(saves.count == 2);
     saves.ok = true;
-    saver.update(w, 76000);
+    saver.update(w, t2 + 2 * S);
     CHECK(saves.count == 3 && saves.last.page == 1);
-    saver.update(w, 99000);
+    saver.update(w, t2 + 20 * S);
     CHECK(saves.count == 3);
 
     // millisecond counter wrap does not break the settle arithmetic
     Saves s2; SettingsSaver sv(stored, save_cb, &s2);
     Settings wrapped = stored; wrapped.page = 3;
     sv.update(wrapped, 0xFFFFFF00u);
-    sv.update(wrapped, 0xFFFFFF00u + 3000);
+    sv.update(wrapped, 0xFFFFFF00u + S);
     CHECK(s2.count == 1);
 }
 

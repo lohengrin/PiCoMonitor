@@ -46,7 +46,7 @@ tests/                         host-side unit tests for the protocol layer (cmak
     CrowPanelBoard.*           Elecrow CrowPanel 2.8": pico_toolset St7789+Xpt2046Touch+SdCard
     PicoDisplayBoard.*         Pimoroni Pico Display Pack: pico_toolset St7789 + RgbLed + DebouncedButtons
     Settings.h / Settings.cpp  persistent settings (backlight, page): serialization, SettingsStore (on the toolset's
-                               FlashStore) and SettingsSaver (write only after 3 s without change); host-tested
+                               FlashStore) and SettingsSaver (write only after 30 s without change); host-tested
     Pages.h / Pages.cpp        page manager: Overview / Network / System / GPU, owns all widgets, switches the
                                Screen's slots; extra pages become available when the host first sends their data
                                (pure widget logic, host-tested)

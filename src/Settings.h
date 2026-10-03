@@ -43,8 +43,10 @@ private:
 /// value many times a second. Call update() once per main-loop iteration.
 class SettingsSaver {
 public:
-    //! The value must stay unchanged this long before it is written
-    static constexpr uint32_t kSettleMs = 3000;
+    //! The value must stay unchanged this long before it is written. Long on
+    //! purpose (fewer flash writes); a change made less than this long before
+    //! power-off is lost.
+    static constexpr uint32_t kSettleMs = 30000;
 
     using SaveFn = bool (*)(void* context, const Settings&);
 
