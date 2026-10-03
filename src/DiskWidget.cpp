@@ -35,16 +35,18 @@ bool DiskWidget::tick() {
     return true;
 }
 
-// Shortens `label` (ASCII) with ".." until it is at most max_px wide at this
-// scale; the font is fixed-width (5 px glyph + 1 px spacing).
-static std::string fit_label(const std::string& label, int max_px, int scale) {
+// "LABEL [XX%]" fitted into max_px (fixed-width font: 5 px glyph + 1 px spacing).
+// Only the label is shortened (with ".."), so the percentage is always shown.
+static std::string fit_label(const std::string& label, int percent, int max_px, int scale) {
+    const std::string suffix = " [" + std::to_string(percent) + "%]";
     const int char_px = 6 * scale;
     const int max_chars = std::max(1, (max_px + scale) / char_px);
-    if (static_cast<int>(label.size()) <= max_chars)
-        return label;
-    if (max_chars <= 2)
-        return label.substr(0, max_chars);
-    return label.substr(0, max_chars - 2) + "..";
+    const int room = std::max(1, max_chars - static_cast<int>(suffix.size()));
+    if (static_cast<int>(label.size()) <= room)
+        return label + suffix;
+    if (room <= 2)
+        return label.substr(0, room) + suffix;
+    return label.substr(0, room - 2) + ".." + suffix;
 }
 
 void DiskWidget::draw(DisplayDriver& display) const {
@@ -84,7 +86,8 @@ void DiskWidget::draw(DisplayDriver& display) const {
         bar.set_value(ratio);
         bar.draw(display);
 
-        const std::string text = fit_label(d.label.empty() ? "?" : d.label, bar_w - 6, scale);
+        const int percent = std::clamp(static_cast<int>(ratio * 100.0f + 0.5f), 0, 100);
+        const std::string text = fit_label(d.label.empty() ? "?" : d.label, percent, bar_w - 6, scale);
         TextWidget label(bar_x + 3, cy - (8 * scale) / 2, text.c_str(), kColorBlack, kColorBlack,
                           kGlyphFont5x8.glyphs, glyph_font_height, scale);
         label.set_transparent(true);

@@ -313,7 +313,7 @@ class SystemMonitor:
     @staticmethod
     def _get_disk_label(path: str) -> str:
         """Return a concise label for a disk partition.
-        * Windows → drive letter only (e.g. "C")
+        * Windows → drive letter and colon (e.g. "C:")
         * Linux   → strip leading "/mnt/" if present
         """
         if sys.platform.startswith("linux"):
@@ -321,9 +321,9 @@ class SystemMonitor:
                 return path.replace("/mnt/", "")
             return path
         # Windows – typical mount point looks like "C:\\" or "D:\\"
-        # Extract the first character (drive letter) and return it upper‑cased
+        # Return the drive letter (upper-cased) followed by the colon
         if len(path) >= 2 and path[1] == ":":
-            return path[0].upper()
+            return path[0].upper() + ":"
         # Fallback – return the raw path if it does not match the expected pattern
         return path
     

@@ -123,3 +123,19 @@ class TestHeadless:
         app.data_collector = Mock()
         app.run()
         app.data_collector.work_loop.assert_called_once()
+
+
+class TestDiskLabel:
+    def test_windows_keeps_colon(self):
+        with patch('PiCoMonitor.sys.platform', 'win32'):
+            assert SystemMonitor._get_disk_label('C:\\') == 'C:'
+            assert SystemMonitor._get_disk_label('d:\\') == 'D:'
+
+    def test_windows_non_drive_path_unchanged(self):
+        with patch('PiCoMonitor.sys.platform', 'win32'):
+            assert SystemMonitor._get_disk_label('\\\\server\\share') == '\\\\server\\share'
+
+    def test_linux_labels(self):
+        with patch('PiCoMonitor.sys.platform', 'linux'):
+            assert SystemMonitor._get_disk_label('/') == '/'
+            assert SystemMonitor._get_disk_label('/mnt/Data') == 'Data'
