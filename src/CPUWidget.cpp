@@ -34,8 +34,10 @@ void CPUWidget::draw(DisplayDriver& display) const {
     display.draw_line(m_x, m_y + m_h - 1, m_x, m_y, border);
 
     if (m_bars.empty()) {
-        TextWidget label(m_x + m_w / 2 - 12, m_y + m_h / 2, "CPU", kColorWhite, kColorBlack,
-                          kGlyphFont5x8.glyphs, glyph_font_height);
+        TextWidget label(0, 0, "CPU", border, kColorBlack,
+                          kGlyphFont5x8.glyphs, glyph_font_height, 2);
+        label.set_transparent(true);
+        label.set_centered(m_x + m_w / 2, m_y + m_h / 2);
         label.draw(display);
         return;
     }

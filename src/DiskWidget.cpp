@@ -14,8 +14,10 @@ void DiskWidget::draw(DisplayDriver& display) const {
     display.draw_line(m_x, m_y + m_h - 1, m_x, m_y, border);
 
     if (m_values.empty()) {
-        TextWidget label(m_x + m_w / 2 - 20, m_y + m_h / 2, "Disks", kColorWhite, kColorBlack,
-                          kGlyphFont5x8.glyphs, glyph_font_height);
+        TextWidget label(0, 0, "Disks", border, kColorBlack,
+                          kGlyphFont5x8.glyphs, glyph_font_height, 2);
+        label.set_transparent(true);
+        label.set_centered(m_x + m_w / 2, m_y + m_h / 2);
         label.draw(display);
         return;
     }
