@@ -142,7 +142,50 @@ static void test_decode() {
     CHECK(d.disks.size() == MonitorData::kMaxDisks);
 }
 
+// Frames the assembler accepts (balanced braces) but that are not valid JSON must neither hang nor
+// crash the decoder, whatever they contain
+static void test_hostile() {
+    bool ok;
+    // unterminated array inside a balanced frame (used to be an endless loop risk)
+    decode(R"({"CPU":[1,2,"RAM":5})", &ok);
+    decode(R"({"X":[})", &ok);
+    decode(R"({"X":[1,2,3})", &ok);
+    CHECK(!ok);
+    // deep nesting in an ignored value (bounded recursion: 4 KiB stack on the Pico)
+    { std::string deep = "{\"X\":"; for (int i = 0; i < 1500; ++i) deep += "["; deep += "}";
+      decode(deep, &ok); CHECK(!ok); }
+    { std::string deep = "{\"X\":"; for (int i = 0; i < 1500; ++i) deep += "{\"a\":"; deep += "1}";
+      decode(deep, &ok); }
+    // non-finite tokens (Python's json.dumps writes NaN / Infinity) are ignored, not parsed
+    { MonitorData d = decode(R"({"TEMP":NaN,"RAM":-Infinity,"CPU":[1,NaN,3],"SWAP":5})", &ok);
+      CHECK(!d.has_temp); CHECK(!d.has_ram); CHECK(d.cpu_percent.size() == 2 || !ok); }
+    // wrongly-typed values leave the reader in sync: the following keys still decode
+    { MonitorData d = decode(R"({"TEMP":"hot","CPU":{"a":[1,2]},"RAM":55.5,"DISKS":[1,"x",{"path":7,"used":3,"total":6},null],"SWAP":true,"FREQ":12})", &ok);
+      CHECK(ok); CHECK(!d.has_temp); CHECK(d.has_ram && d.ram == 55.5);
+      CHECK(d.disks.size() == 1 && d.disks[0].total == 6 && d.disks[0].label.empty());
+      CHECK(!d.has_swap); CHECK(d.has_freq && d.freq_mhz == 12); }
+    // random mutations of a good frame: never hangs or crashes (ASan/UBSan run this)
+    unsigned seed = 12345;
+    auto rnd = [&] { seed = seed * 1664525u + 1013904223u; return seed >> 8; };
+    const std::string base = kSample;
+    for (int n = 0; n < 20000; ++n) {
+        std::string m = base;
+        for (int k = 0, edits = 1 + rnd() % 4; k < edits; ++k) {
+            const size_t pos = rnd() % m.size();
+            switch (rnd() % 3) {
+                case 0: m[pos] = static_cast<char>(rnd() % 256); break;
+                case 1: m.erase(pos, 1 + rnd() % 8); break;
+                default: m.insert(pos, 1, "[]{}\":,-.e"[rnd() % 10]); break;
+            }
+            if (m.empty()) m = "{";
+        }
+        MonitorData d; decode_data(m.data(), m.size(), d);
+        CHECK(d.cpu_percent.size() <= MonitorData::kMaxCores && d.disks.size() <= MonitorData::kMaxDisks);
+    }
+}
+
 int main() {
+    test_hostile();
     test_assembler();
     test_decode();
     test_extras();

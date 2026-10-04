@@ -42,7 +42,7 @@ third_party/pico-toolset/      git submodule: shared drivers + Screen/Widget com
 src/
     PiCoMonitor.cpp            main loop: serial read, JSON decode, widget render, dimming
     Protocol.h / Protocol.cpp  pure-C++ protocol layer (no Pico SDK): MonitorData, FrameAssembler
-                               (incremental frame reassembly), decode_data() (picojson, type-safe)
+                               (incremental frame reassembly), decode_data() (toolset JsonReader, type-safe)
     Com.h / Com.cpp            poll_frame(): non-blocking USB serial read -> FrameAssembler -> decode
 tests/                         host-side unit tests for the protocol layer (cmake -S tests ...)
     Input.h                    Corner enum + RepeatFilter (press + auto-repeat), pure C++, host-tested
@@ -61,7 +61,6 @@ tests/                         host-side unit tests for the protocol layer (cmak
     DiskWidget.*               disk usage bars (pico_toolset::HBarWidget) with the full label drawn inside
                                each bar in black; pages rotate
                                every 4 s when the disks do not all fit (tick())
-    picojson.h                 vendored single-header JSON parser (do not modify)
 host_script/
     PiCoMonitor.py             host monitoring daemon (CLI args, tray icon, logging)
     build_exe.py / *.spec      PyInstaller packaging

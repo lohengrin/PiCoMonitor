@@ -44,7 +44,6 @@ ENDIF()
 
 # Firmware sources, shared by the standalone image and the PicoBoot image
 set(PICOMONITOR_SRC
-src/picojson.h
 src/Protocol.h
 src/Protocol.cpp
 src/Com.h
@@ -84,6 +83,7 @@ set(PICO_TOOLSET_BUILD_RESET_BUTTONS ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_RGB_LED ON  CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_EPD_2IN13_V4 ${WITH_EPD} CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FLASH_STORE ON CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_JSON ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_DVI_HDMI OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FAULT_HANDLER OFF CACHE BOOL "" FORCE)
 include(third_party/pico-toolset/cmake/pico_fatfs.cmake)
@@ -115,6 +115,7 @@ function(picomonitor_configure TARGET)
         pico_toolset_reset_buttons
         pico_toolset_rgb_led
         pico_toolset_flash_store
+        pico_toolset_json
         )
 
     IF(WITH_EPD)
