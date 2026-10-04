@@ -83,6 +83,11 @@ class Config:
     DEFAULT_DELAY: float = 0.5
     MAX_RETRY_ATTEMPTS: int = 3
     SERIAL_TIMEOUT: int = 1
+    # A device that stops reading (frozen firmware, stalled hub) must not block the host forever:
+    # writes fail after this long and the loop reconnects (and shutdown stays possible)
+    SERIAL_WRITE_TIMEOUT: float = 2.0
+    # After the tray / signal shutdown, wait this long for threads before forcing the exit
+    EXIT_GRACE_S: float = 3.0
     BAUD_RATE: int = 19200
     LOG_FILE: str = "pico_monitor.log"
     MAX_LOG_SIZE: int = 1048576  # 1MB
@@ -131,7 +136,8 @@ class SerialPortManager:
             self.serial_connection = serial.Serial(
                 self.port,
                 baudrate=self.baudrate,
-                timeout=self.timeout
+                timeout=self.timeout,
+                write_timeout=config.SERIAL_WRITE_TIMEOUT
             )
             logger.info(f'Connected to serial port: {self.serial_connection.name} at {self.baudrate} baud')
             return self.serial_connection
@@ -147,6 +153,12 @@ class SerialPortManager:
         """Close serial connection"""
         if self.serial_connection and self.serial_connection.is_open:
             try:
+                # Drop unsent data first: closing a tty with pending output can wait for the
+                # driver's closing delay (tens of seconds) when the device is not reading
+                try:
+                    self.serial_connection.reset_output_buffer()
+                except Exception:
+                    pass
                 self.serial_connection.close()
                 logger.info("Serial port closed successfully")
             except Exception as e:
@@ -906,6 +918,10 @@ class SystemTrayIcon:
         self.contflag = True
         self.delay = config.DEFAULT_DELAY
         self.current_delay = self.delay
+        # Called when the user picks Exit (set by Application: stops the data collector too)
+        self.on_exit: Optional[Callable[[], None]] = None
+        # Called from the GUI main loop on SIGINT/SIGTERM (GTK backends only, see run())
+        self.on_signal: Optional[Callable[[int], None]] = None
     
     @staticmethod
     def create_image(width: int, height: int, color1: str, color2: str) -> Image.Image:
@@ -940,6 +956,11 @@ class SystemTrayIcon:
         try:
             logger.info("User requested exit")
             self.contflag = False
+            if self.on_exit is not None:
+                try:
+                    self.on_exit()          # stop the data collector: its thread keeps the process alive otherwise
+                except Exception:
+                    logger.exception("Error while stopping the application")
             if self.icon:
                 self.icon.visible = False
                 self.icon.stop()
@@ -956,10 +977,55 @@ class SystemTrayIcon:
         self.icon.menu = self.create_menu()
         self.icon.title = self.title
     
-    def run(self, work_function):
-        """Run the system tray icon with the given work function"""
+    def stop_icon(self):
+        """Hide the icon and end its event loop (safe to call from any thread, more than once)"""
         if self.icon:
-            self.icon.run(work_function)
+            try:
+                self.icon.visible = False
+                self.icon.stop()
+            except Exception as e:
+                logger.debug(f"Stopping the tray icon failed: {e}")
+
+    def _uses_glib_loop(self) -> bool:
+        """The AppIndicator / GTK pystray backends run a GLib main loop in the main thread"""
+        module = type(self.icon).__module__ if self.icon else ""
+        return module.startswith(("pystray._appindicator", "pystray._gtk", "pystray._util.gtk"))
+
+    def _install_glib_signal_handlers(self) -> bool:
+        """Route SIGINT/SIGTERM through the GLib main loop. The GTK backend resets SIGINT to the OS default
+        when its loop starts (so Python handlers never run: Ctrl+C just kills the process, skipping the
+        shutdown), and the main thread sits inside the loop where Python-level handlers cannot run. A GLib
+        signal source is dispatched by the loop itself, immediately. Must be called after the loop started
+        (see run()). Returns False where not applicable."""
+        if self.on_signal is None or not self._uses_glib_loop():
+            return False
+        try:
+            from gi.repository import GLib
+        except Exception as e:
+            logger.debug(f"GLib unavailable, no loop-level signal handling: {e}")
+            return False
+
+        def make(sig):
+            def handler():
+                self.on_signal(sig)
+                return GLib.SOURCE_REMOVE       # one shot: shutting down
+            return handler
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, int(sig), make(sig))
+        return True
+
+    def run(self, work_function):
+        """Run the system tray icon with the given work function (in pystray's setup thread)"""
+        if not self.icon:
+            return
+
+        def setup(icon):
+            # pystray runs this once its loop is up, i.e. after it reset SIGINT: install ours now
+            self._install_glib_signal_handlers()
+            work_function(icon)
+
+        self.icon.run(setup)
 
 @dataclass
 class Metric:
@@ -1028,7 +1094,9 @@ class DataCollector:
                 return False
             # Use UTF-8 to be safe with any characters
             serial_conn.write(serialized_data.encode('utf-8'))
-            serial_conn.flush()  # Ensure data is sent immediately
+            # No flush(): it waits for the device to drain the data with no timeout, which would
+            # hang forever on a stalled device. write() is already bounded by write_timeout and
+            # hands the data to the driver immediately.
             return True
         except (json.JSONDecodeError, UnicodeEncodeError, TypeError, ValueError) as e:
             logger.error(f"Failed to serialize or encode data: {e}")
@@ -1193,6 +1261,8 @@ class Application:
         self.args = None
         self.tray_icon = None
         self.data_collector = None
+        self._shutting_down = False
+        self._shutdown_lock = threading.Lock()
     
     def parse_arguments(self):
         """Parse command line arguments"""
@@ -1222,14 +1292,39 @@ class Application:
         """Validate command line arguments"""
         return ArgumentValidator.validate_all(self.args)
     
+    def shutdown(self, reason: str = "requested"):
+        """Stop everything, from any thread, any number of times: the data collector (whose thread would
+        otherwise keep the process alive after the tray loop ended) and the tray icon."""
+        with self._shutdown_lock:
+            if self._shutting_down:
+                return
+            self._shutting_down = True
+        logger.info(f"Shutting down ({reason})")
+        if self.data_collector:
+            self.data_collector.stop()
+        if self.tray_icon:
+            self.tray_icon.stop_icon()
+
+    def ensure_exit(self, grace: Optional[float] = None):
+        """Called once run() returned: give worker threads a moment to finish, then exit anyway.
+        A non-daemon thread stuck in a blocking call (a device that stopped answering) would
+        otherwise keep the process alive after the user asked to quit."""
+        deadline = time.monotonic() + (config.EXIT_GRACE_S if grace is None else grace)
+        for t in threading.enumerate():
+            if t is not threading.current_thread() and not t.daemon:
+                t.join(max(0.0, deadline - time.monotonic()))
+        stuck = [t.name for t in threading.enumerate() if t is not threading.current_thread() and not t.daemon]
+        if stuck:
+            logger.warning(f"Threads still running after shutdown ({', '.join(stuck)}), forcing exit")
+            logging.shutdown()
+            os._exit(0)
+
     def setup_signal_handlers(self):
-        """Setup signal handlers for graceful shutdown"""
+        """Setup signal handlers for graceful shutdown (Python-level; the GTK tray loop gets its own,
+        see SystemTrayIcon._install_glib_signal_handlers)"""
         def signal_handler(sig, frame):
-            logger.info(f"Received signal {sig}, shutting down gracefully")
-            if self.tray_icon:
-                self.tray_icon.exit_action()
-            if self.data_collector:
-                self.data_collector.stop()
+            logger.info(f"Received signal {sig}")
+            self.shutdown(f"signal {sig}")
         
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
@@ -1242,6 +1337,8 @@ class Application:
             try:
                 tray = SystemTrayIcon()
                 tray.initialize()
+                tray.on_exit = lambda: self.shutdown("tray Exit")
+                tray.on_signal = lambda sig: (logger.info(f"Received signal {sig}"), self.shutdown(f"signal {sig}"))
                 self.tray_icon = tray
             except Exception as e:
                 logger.warning(f"System tray unavailable ({e}), running headless")
@@ -1257,6 +1354,7 @@ class Application:
             # Start the application
             if self.tray_icon is not None:
                 self.tray_icon.run(lambda icon: self.data_collector.work_loop(icon))
+                self.shutdown("tray closed")    # the loop ended: make sure nothing keeps running
             else:
                 self.data_collector.work_loop(SimpleNamespace(visible=True))   # blocks until Ctrl+C / SIGTERM
             
@@ -1285,6 +1383,7 @@ def main():
         app.setup_signal_handlers()
         app.initialize_components()
         app.run()
+        app.ensure_exit()
         
     except Exception as e:
         logger.error(f"Error in main function: {e}")

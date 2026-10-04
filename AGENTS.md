@@ -128,6 +128,19 @@ sensor; Windows has no psutil sensors and uses LibreHardwareMonitor if available
 extracted there; `build_exe.py`/`PiCoMonitor.spec` bundle its `*.dll`): `HardwareMonitor.get_temperature()`
 sends the CPU package temperature, or the GPU core one when the CPU reads 0 (LHM needs admin rights for
 CPU sensors), otherwise no temperature.
+**Exit path** (all of these end in `Application.shutdown()`, which is idempotent and stops the data collector
+*and* the tray): tray Exit (`SystemTrayIcon.on_exit`), Ctrl+C / SIGTERM, and the tray loop ending. Why it is
+built this way: pystray runs the data loop in a **non-daemon** thread and only stops its GUI loop on Exit, so
+without stopping the collector the process lingered forever; and the GTK/AppIndicator backend resets SIGINT to
+the OS default when its loop starts (Ctrl+C then just killed the process, skipping the shutdown) while the main
+thread sits in `GLib.MainLoop` where Python signal handlers cannot run, so `SystemTrayIcon` registers
+`GLib.unix_signal_add` handlers from the setup callback (after pystray's reset). Other backends (Windows,
+X11) keep the Python-level handlers; a console Ctrl+C may then wait for a tray event there (untested).
+The serial port has a **write timeout** (`SERIAL_WRITE_TIMEOUT`, no `flush()`, output dropped before close):
+a device that stops reading (e.g. frozen firmware) used to block `write()` forever and make every exit path
+hang. `Application.ensure_exit()` is the last resort: threads still alive `EXIT_GRACE_S` after shutdown are
+abandoned and the process exits (`os._exit`). Reproduce exit bugs on a pty "device" that is never read.
+
 **Log flooding**: persistent conditions (device missing, a sensor that does not exist, a failing partition...)
 must not fill the log. `RepeatFilter` (on the module logger, tuned by `Config.LOG_REPEAT_*`) logs a repeating
 INFO+ message once, then again after 60 s, 2 min, 4 min... up to 1 h with a "[N similar messages suppressed]"
