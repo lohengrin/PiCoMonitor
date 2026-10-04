@@ -11,14 +11,15 @@
 ///
 /// The panel is slow (a partial refresh takes a fraction of a second, a full one ~2 s) and is
 /// not meant to be refreshed continuously: the widgets draw into a 1 bpp buffer as on the other
-/// boards, but the panel itself is only updated by tick() when the picture changed (so at the pace of
-/// the incoming data, limited by the refresh time itself), with a full clear every kFullClearMs
-/// against ghosting. See third_party/pico-toolset/components/epd_2in13_v4.
+/// boards, but the panel itself is only updated by tick(), at most every kMinRefreshMs, with a
+/// full clear every kFullClearMs against ghosting. See third_party/pico-toolset/components/epd_2in13_v4.
 class EpdBoard {
 public:
     static constexpr int WIDTH = pico_toolset::Epd2in13V4::kHeight;   // landscape
     static constexpr int HEIGHT = pico_toolset::Epd2in13V4::kWidth;
 
+    //! Shortest delay between two panel refreshes (the panel's spec; a page switch refreshes at once)
+    static constexpr uint32_t kMinRefreshMs = 2000;
     //! Full white clear (with blink) this often
     static constexpr uint32_t kFullClearMs = 30 * 60 * 1000;
 
@@ -44,7 +45,9 @@ private:
     pico_toolset::Epd2in13V4 m_epd;
     MonoDisplay m_driver;
     bool m_pending = false;
+    bool m_urgent = false;          // refresh now, whatever the minimum delay
     bool m_has_shown = false;
     bool m_button_prev = false;
+    uint32_t m_last_refresh_ms = 0;
     uint32_t m_last_clear_ms = 0;
 };

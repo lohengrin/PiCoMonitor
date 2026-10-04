@@ -35,8 +35,7 @@ default Elecrow CrowPanel), `-DWITH_EPD=ON` (Pico W + Waveshare Pico-ePaper-2.13
 ## E-ink version (Pico W + Waveshare Pico-ePaper-2.13 V4)
 `-DWITH_EPD=ON` builds the same firmware for a 250x122 black-and-white e-paper plugged on the Pico W header
 (same pages and widgets as the other boards, drawn into a 1-bit buffer: bright colors become ink, the
-black background stays paper). The panel is refreshed whenever new data (or a page switch) arrives, i.e. at the host's pace (a refresh itself takes a
-fraction of a second), with a full clear every 30 minutes against ghosting; there is no backlight and no dimming.
+black background stays paper). The panel is refreshed at most every 2 s (its specification; a page switch refreshes at once), with a full clear every 30 minutes against ghosting; there is no backlight and no dimming.
 The only control is the **BOOTSEL** button: it shows the next page.
 
 ## Build outputs
