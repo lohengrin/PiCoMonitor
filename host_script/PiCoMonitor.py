@@ -10,6 +10,7 @@ import sys
 import argparse
 import re
 import threading
+import collections
 import glob
 import shutil
 import subprocess
@@ -86,6 +87,13 @@ class Config:
     LOG_FILE: str = "pico_monitor.log"
     MAX_LOG_SIZE: int = 1048576  # 1MB
     LOG_BACKUP_COUNT: int = 3
+    # Repeated log messages (see RepeatFilter): a message that keeps coming back is logged
+    # at once, then again after LOG_REPEAT_FIRST_S, then at doubling intervals up to
+    # LOG_REPEAT_MAX_S; each of those re-emissions says how many were suppressed.
+    LOG_REPEAT_FIRST_S: float = 60.0
+    LOG_REPEAT_MAX_S: float = 3600.0
+    LOG_REPEAT_RESET_S: float = 600.0     # silent for this long -> the next one is logged at once
+    LOG_REPEAT_MAX_KEYS: int = 500
 
 config = Config()
 
@@ -198,6 +206,67 @@ class PortDetector:
         return "\n".join(lines) if lines else "(no serial ports found)"
 
 
+class RepeatFilter(logging.Filter):
+    """Keeps a persistent condition from flooding the log. Messages at INFO and
+    above that repeat (same level and logger, same text once digits are
+    normalised, so "retry in 4 s" and "retry in 8 s" are one message) are
+    logged the first time, then re-logged only after an interval that doubles
+    each time (first_s, 2*first_s, ... up to max_s) and says how many were
+    suppressed. A message that stays away for reset_s is logged at once again.
+    DEBUG messages are never filtered (they are only on when asked for)."""
+
+    _DIGITS = re.compile(r"\d+(?:\.\d+)?")
+
+    class _State:
+        __slots__ = ("last_seen", "last_emit", "interval", "suppressed")
+
+        def __init__(self, now: float, interval: float):
+            self.last_seen = self.last_emit = now
+            self.interval = interval
+            self.suppressed = 0
+
+    def __init__(self, first_s: float = 60.0, max_s: float = 3600.0, reset_s: float = 600.0,
+                 max_keys: int = 500, clock: Callable[[], float] = time.monotonic):
+        super().__init__()
+        self.first_s, self.max_s, self.reset_s, self.max_keys = first_s, max_s, reset_s, max_keys
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._states: "collections.OrderedDict[Tuple[int, str, str], RepeatFilter._State]" = collections.OrderedDict()
+
+    @staticmethod
+    def _annotate(record: logging.LogRecord, suppressed: int):
+        if suppressed:
+            record.msg = (f"{record.getMessage()} "
+                          f"[{suppressed} similar message{'s' if suppressed > 1 else ''} suppressed]")
+            record.args = ()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno < logging.INFO:
+            return True
+        key = (record.levelno, record.name, self._DIGITS.sub("#", record.getMessage()))
+        now = self._clock()
+        with self._lock:
+            state = self._states.get(key)
+            if state is None or now - state.last_seen >= self.reset_s:
+                suppressed = state.suppressed if state else 0
+                self._states[key] = self._State(now, self.first_s)
+                self._states.move_to_end(key)
+                if len(self._states) > self.max_keys:
+                    self._states.popitem(last=False)
+                self._annotate(record, suppressed)
+                return True
+            state.last_seen = now
+            self._states.move_to_end(key)
+            if now - state.last_emit >= state.interval:
+                suppressed, state.suppressed = state.suppressed, 0
+                state.last_emit = now
+                state.interval = min(state.interval * 2, self.max_s)
+                self._annotate(record, suppressed)
+                return True
+            state.suppressed += 1
+            return False
+
+
 # Configure logging with rotation
 class LogSetup:
     def __init__(self, name: str = __name__):
@@ -234,6 +303,11 @@ class LogSetup:
             self.logger.addHandler(file_handler)
             self.logger.addHandler(console_handler)
             
+            # Persistent conditions must not flood the log (applied once per record, before the handlers)
+            if not any(isinstance(f, RepeatFilter) for f in self.logger.filters):
+                self.logger.addFilter(RepeatFilter(config.LOG_REPEAT_FIRST_S, config.LOG_REPEAT_MAX_S,
+                                                   config.LOG_REPEAT_RESET_S, config.LOG_REPEAT_MAX_KEYS))
+
             # Set default level
             self.logger.setLevel(logging.INFO)
             
@@ -982,18 +1056,24 @@ class DataCollector:
         # Main loop (connect/reconnect) with exponential back‑off
         retry_delay = 2  # seconds, will double on each failure up to a max
         max_delay = 30
+        waiting_for_device = False    # "waiting" is logged once, when the wait starts (and "found" when it ends)
         while self.contflag:
             # Auto-detect on every attempt: the device may be plugged in later or
             # change its port name
             port = self.port or PortDetector.find()
             if port is None:
-                logger.info("No Pico serial port found, waiting for the device...")
+                if not waiting_for_device:
+                    logger.info("No Pico serial port found, waiting for the device...")
+                    waiting_for_device = True
                 self._wake.wait(min(retry_delay, 5))
                 continue
+            if waiting_for_device:
+                logger.info(f"Pico found on {port}")
+                waiting_for_device = False
             try:
                 # Attempt to open serial port with context manager
                 with SerialPortManager(port, config.BAUD_RATE, config.SERIAL_TIMEOUT) as serial_conn:
-                    logger.info(f'Connected to serial port: {serial_conn.name}')
+                    # (SerialPortManager already logged the connection)
                     # Reset back‑off after a successful connection
                     retry_delay = 2
                     # Data loop – collect and send until a serial error occurs or shutdown
@@ -1014,10 +1094,13 @@ class DataCollector:
                             break
                         except Exception as e:
                             logger.exception("Unexpected error in data collection loop")
-                            # Continue collecting; do not break unless contflag cleared
+                            # Continue collecting; do not break unless contflag cleared. Pause a
+                            # moment so a persistent error cannot spin (and flood) at full speed
+                            self._wake.wait(1.0)
                             continue
             except SerialCommunicationError as e:
-                logger.warning(f'Serial port connection failed: {e}')
+                # SerialPortManager already logged the error; keep this one for diagnosis only
+                logger.debug(f'Serial port connection failed: {e}')
             except Exception as e:
                 logger.exception("Unexpected error in main loop")
             

@@ -11,6 +11,16 @@ import sys
 # Add project root to path for imports
 sys.path.insert(0, 'E:\\users\\Apps\\PicoMonitor')
 
+@pytest.fixture(autouse=True)
+def reset_log_repeat_filter():
+    """The module logger's RepeatFilter remembers messages across tests; start each test clean"""
+    import PiCoMonitor
+    for f in PiCoMonitor.logger.filters:
+        if isinstance(f, PiCoMonitor.RepeatFilter):
+            f._states.clear()
+    yield
+
+
 @pytest.fixture
 def mock_logger(caplog):
     """Fixture to capture log output using caplog"""

@@ -128,6 +128,14 @@ sensor; Windows has no psutil sensors and uses LibreHardwareMonitor if available
 extracted there; `build_exe.py`/`PiCoMonitor.spec` bundle its `*.dll`): `HardwareMonitor.get_temperature()`
 sends the CPU package temperature, or the GPU core one when the CPU reads 0 (LHM needs admin rights for
 CPU sensors), otherwise no temperature.
+**Log flooding**: persistent conditions (device missing, a sensor that does not exist, a failing partition...)
+must not fill the log. `RepeatFilter` (on the module logger, tuned by `Config.LOG_REPEAT_*`) logs a repeating
+INFO+ message once, then again after 60 s, 2 min, 4 min... up to 1 h with a "[N similar messages suppressed]"
+suffix; digits are ignored when comparing, DEBUG is never filtered. It covers every call, existing and
+future, but loops should still log *state changes* rather than every iteration (see `work_loop`: "waiting
+for the device" once, "Pico found" once; the data loop pauses 1 s after an unexpected error so it cannot
+spin). `tests/conftest.py` resets the filter between tests.
+
 Known: 14 older tests (serial-manager, disk, Linux-temperature and tray mocks) fail on Windows too;
 everything else passes (`cd host_script && pytest`).
 ```
