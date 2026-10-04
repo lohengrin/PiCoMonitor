@@ -30,7 +30,14 @@ $ make
 
 Useful options (no other dependency is needed for either board): `-DPICO_BOARD=pico` (plain Pico/RP2040, default `pico_w`),
 `-DWITH_PICODISPLAY=ON -DWITH_CROWPANEL=OFF` (Pimoroni Pico Display Pack instead of the
-default Elecrow CrowPanel).
+default Elecrow CrowPanel), `-DWITH_EPD=ON` (Pico W + Waveshare Pico-ePaper-2.13 V4 e-ink, see below).
+
+## E-ink version (Pico W + Waveshare Pico-ePaper-2.13 V4)
+`-DWITH_EPD=ON` builds the same firmware for a 250x122 black-and-white e-paper plugged on the Pico W header
+(same pages and widgets as the other boards, drawn into a 1-bit buffer: bright colors become ink, the
+black background stays paper). The panel is slow, so it is refreshed at most every 5 s (a page switch
+refreshes at once) with a full clear every 30 minutes against ghosting; there is no backlight and no dimming.
+The only control is the **BOOTSEL** button: it shows the next page.
 
 ## Build outputs
 Each build produces two firmware images:

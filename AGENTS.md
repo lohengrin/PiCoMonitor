@@ -12,7 +12,7 @@ PiCoMonitor is a PC-monitoring system made of two parts:
 - **Host script** (Python 3.8+) that collects system data with `psutil`
   (plus LibreHardwareMonitor on Windows) and sends it to the Pico over serial.
 
-Two display boards are supported, selected at **compile time**:
+Three display boards are supported, selected at **compile time** (the third, e-ink, is described below the list):
 
 - **Pico Display Pack** (Pimoroni) – 240x135, RGB565, includes an RGB LED and 2
   buttons used here. Build with `-DWITH_PICODISPLAY=ON`.
@@ -20,7 +20,12 @@ Two display boards are supported, selected at **compile time**:
   (both sharing SPI1 with the display), requires a manual LCD reset on GPIO15.
   This is the default (`-DWITH_CROWPANEL=ON`).
 
-Both boards' display/touch/SD drivers and the Screen/Widget composition layer
+- **Pico W + Waveshare Pico-ePaper-2.13 V4** (e-ink, `-DWITH_EPD=ON`) – 250x122, 1 bpp, no backlight/touch,
+  BOOTSEL button = next page. `EpdBoard` + `MonoDisplay.h` (pure C++ 1 bpp landscape `DisplayDriver`, host-tested:
+  bright colors -> ink, black -> paper); the panel is refreshed from `EpdBoard::tick()` (>= 5 s apart, immediately
+  on a page switch, full clear every 30 min), never from `present()`. Same Pages/widgets as the other boards.
+
+The boards' display/touch/SD drivers and the Screen/Widget composition layer
 come from **`third_party/pico-toolset`**, a git submodule
 ([lohengrin/Pico-Toolset](https://github.com/lohengrin/Pico-Toolset)) shared
 with this author's other Pico projects. See that repo's

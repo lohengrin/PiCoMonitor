@@ -8,7 +8,10 @@
 #include "pico_toolset/screen.h"
 
 // Platform header selected by CMake
-#ifdef WITH_CROWPANEL
+#if defined(WITH_EPD)
+#include "EpdBoard.h"
+using Board = EpdBoard;
+#elif defined(WITH_CROWPANEL)
 #include "CrowPanelBoard.h"
 using Board = CrowPanelBoard;
 #else

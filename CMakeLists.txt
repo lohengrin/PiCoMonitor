@@ -11,6 +11,7 @@ include(pico_sdk_import.cmake)
 
 option(WITH_PICODISPLAY "Build for Pimonori LCD" OFF)
 option(WITH_CROWPANEL   "Build for Elecrow CrowPanel" ON)
+option(WITH_EPD         "Build for Pico W + Waveshare Pico-ePaper-2.13 V4 (e-ink)" OFF)
 
 project(PiCoMonitor C CXX ASM)
 set(CMAKE_C_STANDARD 11)
@@ -23,7 +24,13 @@ pico_sdk_init()
 # Board-specific implementation (compile only the selected one). Both boards'
 # display/touch/SD drivers come from the shared third_party/pico-toolset
 # submodule -- see that repo's boards/crowpanel_pico_hmi_28.md.
-IF(WITH_PICODISPLAY)
+IF(WITH_EPD)
+    set(BOARD_SRC
+        src/EpdBoard.h
+        src/EpdBoard.cpp
+        src/MonoDisplay.h
+    )
+ELSEIF(WITH_PICODISPLAY)
     set(BOARD_SRC
         src/PicoDisplayBoard.h
         src/PicoDisplayBoard.cpp
@@ -75,6 +82,7 @@ set(PICO_TOOLSET_BUILD_PSRAM   OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_USB_HID OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_RESET_BUTTONS ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_RGB_LED ON  CACHE BOOL "" FORCE)
+set(PICO_TOOLSET_BUILD_EPD_2IN13_V4 ${WITH_EPD} CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FLASH_STORE ON CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_DVI_HDMI OFF CACHE BOOL "" FORCE)
 set(PICO_TOOLSET_BUILD_FAULT_HANDLER OFF CACHE BOOL "" FORCE)
@@ -109,7 +117,10 @@ function(picomonitor_configure TARGET)
         pico_toolset_flash_store
         )
 
-    IF(WITH_PICODISPLAY)
+    IF(WITH_EPD)
+        target_link_libraries(${TARGET} pico_toolset_epd_2in13_v4)
+        target_compile_definitions(${TARGET} PRIVATE WITH_EPD)
+    ELSEIF(WITH_PICODISPLAY)
         target_compile_definitions(${TARGET} PRIVATE WITH_PICODISPLAY)
     ELSE()
         target_compile_definitions(${TARGET} PRIVATE WITH_CROWPANEL)
@@ -166,7 +177,9 @@ ENDIF()
 # the options used for this build (display, PICO_BOARD, build type), e.g.
 #   PiCoMonitor-crowpanel-pico_w-Release.uf2
 #   PiCoMonitor-crowpanel-pico_w-Release.picoboot.bin
-IF(WITH_PICODISPLAY)
+IF(WITH_EPD)
+    set(FW_DISPLAY epd)
+ELSEIF(WITH_PICODISPLAY)
     set(FW_DISPLAY picodisplay)
 ELSE()
     set(FW_DISPLAY crowpanel)

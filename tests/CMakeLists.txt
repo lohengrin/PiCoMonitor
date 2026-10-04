@@ -34,3 +34,10 @@ target_include_directories(test_settings PRIVATE ../src ${TOOLSET_FLASH_STORE}/i
 target_compile_options(test_settings PRIVATE -Wall -Wextra -fsanitize=address,undefined)
 target_link_options(test_settings PRIVATE -fsanitize=address,undefined)
 add_test(NAME settings COMMAND test_settings)
+
+# 1 bpp e-paper DisplayDriver (header-only)
+add_executable(test_mono_display test_mono_display.cpp)
+target_include_directories(test_mono_display PRIVATE ../src ${TOOLSET_SCREEN})
+target_compile_options(test_mono_display PRIVATE -Wall -Wextra -fsanitize=address,undefined)
+target_link_options(test_mono_display PRIVATE -fsanitize=address,undefined)
+add_test(NAME mono_display COMMAND test_mono_display)
