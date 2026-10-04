@@ -19,7 +19,7 @@ public:
     static constexpr int HEIGHT = pico_toolset::Epd2in13V4::kWidth;
 
     //! Shortest delay between two panel refreshes (a page switch refreshes at once)
-    static constexpr uint32_t kMinRefreshMs = 5000;
+    static constexpr uint32_t kMinRefreshMs = 1000;
     //! Full white clear (with blink) this often
     static constexpr uint32_t kFullClearMs = 30 * 60 * 1000;
 

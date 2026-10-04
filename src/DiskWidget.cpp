@@ -49,6 +49,24 @@ static std::string fit_label(const std::string& label, int percent, int max_px, 
     return label.substr(0, room - 2) + ".." + suffix;
 }
 
+namespace {
+// Draws through to `target`, but text pixels at x >= `split` come out inverted (black -> white):
+// on a 1-bit panel the black label over the filled part of a bar is paper-on-ink, over the empty
+// part of the bar (paper) it has to be ink-on-paper.
+class InvertAfter : public DisplayDriver {
+public:
+    InvertAfter(DisplayDriver& target, int split) : m_target(target), m_split(split) {}
+    int width() const override { return m_target.width(); }
+    int height() const override { return m_target.height(); }
+    void set_pixel(int x, int y, Color c) override {
+        m_target.set_pixel(x, y, (x >= m_split && c.rgb565 == kColorBlack.rgb565) ? kColorWhite : c);
+    }
+private:
+    DisplayDriver& m_target;
+    int m_split;
+};
+} // namespace
+
 void DiskWidget::draw(DisplayDriver& display) const {
     Color border = Color::from_rgb888(0, 50, 100);
     display.draw_line(m_x, m_y, m_x + m_w - 1, m_y, border);
@@ -86,6 +104,7 @@ void DiskWidget::draw(DisplayDriver& display) const {
         }
     }
 
+    const bool mono = display.is_monochrome();
     for (int j = 0; j < rows; ++j) {
         const auto& d = m_values[static_cast<size_t>(first + j)];
         const float ratio = d.total > 0 ? static_cast<float>(d.used / d.total) : 0.0f;
@@ -94,6 +113,15 @@ void DiskWidget::draw(DisplayDriver& display) const {
         const int cy = m_y + 1 + j * spacing + spacing / 2;
         HBarWidget bar(bar_x, cy, bar_w, thickness);
         bar.set_value(ratio);
+        if (mono) {
+            // No dark track on a 1-bit panel (it would look like the fill): outline the bar instead
+            bar.set_colors(kColorBlack, kColorWhite, kColorWhite, kColorWhite);
+            const int top = cy - thickness / 2, bottom = top + thickness - 1;
+            display.draw_line(bar_x, top, bar_x + bar_w - 1, top, kColorWhite);
+            display.draw_line(bar_x, bottom, bar_x + bar_w - 1, bottom, kColorWhite);
+            display.draw_line(bar_x, top, bar_x, bottom, kColorWhite);
+            display.draw_line(bar_x + bar_w - 1, top, bar_x + bar_w - 1, bottom, kColorWhite);
+        }
         bar.draw(display);
 
         const int percent = std::clamp(static_cast<int>(ratio * 100.0f + 0.5f), 0, 100);
@@ -101,6 +129,11 @@ void DiskWidget::draw(DisplayDriver& display) const {
         TextWidget label(bar_x + 3, cy - (8 * scale) / 2, text.c_str(), kColorBlack, kColorBlack,
                           kGlyphFont5x8.glyphs, glyph_font_height, scale);
         label.set_transparent(true);
-        label.draw(display);
+        if (mono) {
+            InvertAfter text_target(display, bar_x + std::max(1, static_cast<int>(bar_w * ratio)));
+            label.draw(text_target);
+        } else {
+            label.draw(display);
+        }
     }
 }

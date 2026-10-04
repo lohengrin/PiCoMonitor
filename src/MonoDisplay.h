@@ -26,6 +26,7 @@ public:
     //! Landscape size
     int width() const override { return m_nh; }
     int height() const override { return m_nw; }
+    bool is_monochrome() const override { return true; }
 
     //! Colors whose brightest channel (0..255) reaches this are drawn as ink
     static constexpr int kInkThreshold = 64;

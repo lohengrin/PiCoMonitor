@@ -22,7 +22,7 @@ Three display boards are supported, selected at **compile time** (the third, e-i
 
 - **Pico W + Waveshare Pico-ePaper-2.13 V4** (e-ink, `-DWITH_EPD=ON`) – 250x122, 1 bpp, no backlight/touch,
   BOOTSEL button = next page. `EpdBoard` + `MonoDisplay.h` (pure C++ 1 bpp landscape `DisplayDriver`, host-tested:
-  bright colors -> ink, black -> paper); the panel is refreshed from `EpdBoard::tick()` (>= 5 s apart, immediately
+  bright colors -> ink, black -> paper); the panel is refreshed from `EpdBoard::tick()` (>= 1 s apart, immediately
   on a page switch, full clear every 30 min), never from `present()`. Same Pages/widgets as the other boards.
 
 The boards' display/touch/SD drivers and the Screen/Widget composition layer
