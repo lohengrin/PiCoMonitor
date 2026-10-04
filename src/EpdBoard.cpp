@@ -49,7 +49,6 @@ InputEvents EpdBoard::poll_input() {
     const bool now = bootsel_pressed();
     if (now && !m_button_prev) {
         ev.pressed = ev.fired = CornerBottomRight;
-        m_urgent = true;          // answer a button press without waiting
     }
     m_button_prev = now;
     return ev;
@@ -59,16 +58,13 @@ void EpdBoard::tick() {
     if (!m_pending)
         return;
     const uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (m_has_shown && !m_urgent && now - m_last_refresh_ms < kMinRefreshMs)
-        return;
     if (m_has_shown && now - m_last_clear_ms >= kFullClearMs) {
         m_epd.clear_screen();     // the next update() is a full one
         m_last_clear_ms = now;
     }
     m_epd.update(s_framebuffer);  // blocks for the refresh; the panel sleeps afterwards
-    m_pending = m_urgent = false;
+    m_pending = false;
     m_has_shown = true;
-    m_last_refresh_ms = to_ms_since_boot(get_absolute_time());
     if (m_last_clear_ms == 0)
-        m_last_clear_ms = m_last_refresh_ms;
+        m_last_clear_ms = to_ms_since_boot(get_absolute_time());
 }
