@@ -1,120 +1,96 @@
-PiCoMonitor
------------
-
-# Introduction
+# PiCoMonitor
 
 ![System running](images/PiCoMonitor_1.jpg)
 
-Rasberry pico (w) based pc monitoring. Use pico display pack from Pimoroni [https://pimoroni.com/displaypack].
+A small PC monitor built on a Raspberry Pi Pico / Pico W. A Python script on the host collects CPU, temperature,
+RAM, disks, network, GPU... with `psutil` and sends it over USB serial as JSON
+(see [exemple.json](host_script/exemple.json)); the firmware draws it on a small display.
 
-Feed by a Python script using psutil + serial.
-Transmission of data over USB serial is done by JSON data (see [exemple.json](exemple.json) )
+## Supported hardware
 
-**PiCoMonitor.py** python script support Linux and Windows (need psutil, pyserial, pystray).
-CPU Temp is not supported on Windows yet.
-This script need to be modified to fit your hardware/software configuration.
+One firmware, three display boards, chosen at build time:
 
-# Compilation
-Needs:
-- [pico-sdk](https://github.com/raspberrypi/pico-sdk)
-- The `third_party/pico-toolset` git submodule (display/touch/SD drivers,
-  shared with this author's other Pico projects): `git submodule update --init`
+| Board | Display | Controls | CMake option |
+|-------|---------|----------|--------------|
+| Elecrow CrowPanel 2.8" HMI (default) | 320x240 colour, touch | touch the screen corners | `-DWITH_CROWPANEL=ON` |
+| [Pimoroni Pico Display Pack](https://pimoroni.com/displaypack) | 240x135 colour, RGB status LED | buttons A / B / X / Y | `-DWITH_PICODISPLAY=ON -DWITH_CROWPANEL=OFF` |
+| Pico W + Waveshare Pico-ePaper-2.13 V4 | 250x122 black & white e-paper | BOOTSEL button | `-DWITH_EPD=ON` |
 
-```
-$ git submodule update --init
-$ mkdir build
-$ cd build
-$ cmake -DPICO_BOARD=pico_w ..
-$ make
-```
+Display, touch and SD drivers come from the `third_party/pico-toolset` submodule, shared with the author's other Pico projects.
 
-Useful options (no other dependency is needed for either board): `-DPICO_BOARD=pico` (plain Pico/RP2040, default `pico_w`),
-`-DWITH_PICODISPLAY=ON -DWITH_CROWPANEL=OFF` (Pimoroni Pico Display Pack instead of the
-default Elecrow CrowPanel), `-DWITH_EPD=ON` (Pico W + Waveshare Pico-ePaper-2.13 V4 e-ink, see below).
+## Build
 
-## E-ink version (Pico W + Waveshare Pico-ePaper-2.13 V4)
-`-DWITH_EPD=ON` builds the same firmware for a 250x122 black-and-white e-paper plugged on the Pico W header
-(same pages and widgets as the other boards, drawn into a 1-bit buffer: bright colors become ink, the
-black background stays paper). The panel is refreshed at most every 2 s (its specification; a page switch refreshes at once), with a full clear every 30 minutes against ghosting; there is no backlight and no dimming.
-The only control is the **BOOTSEL** button: it shows the next page.
-
-## Build outputs
-Each build produces two firmware images:
-
-| File | For |
-|------|-----|
-| `PiCoMonitor.uf2` / `.bin` | Normal firmware, linked at `0x10000000`: copy the `.uf2` to the Pico (BOOTSEL) |
-| `PiCoMonitor.picoboot.bin` (+ `.picoboot.uf2`) | Same firmware linked into the [PicoBoot](../PicoBoot) bootloader's application partition (`0x10080000`): put the **`.bin`** on PicoBoot's SD card |
-
-The PicoBoot image needs a PicoBoot checkout (default `../PicoBoot`, override with
-`-DPICOBOOT_DIR=...`); if it is not found the build warns and skips it. Other options:
-`-DPICOMONITOR_FLASH_SIZE=<bytes>` (board flash size, default 2 MiB: CrowPanel, Pico, Pico W) and
-`-DWITH_PICOBOOT=OFF` to disable it.
-
-### `install_firmware` target
-```
-$ make install_firmware
-```
-builds everything and copies every `.bin` / `.uf2` to `install/` (git-ignored), renamed with
-the options of that build (`<display>-<PICO_BOARD>-<build type>`), so several variants can sit
-side by side:
+Needs the [pico-sdk](https://github.com/raspberrypi/pico-sdk) (`PICO_SDK_PATH`) and the submodule.
 
 ```
-install/PiCoMonitor-crowpanel-pico-Release.uf2
-install/PiCoMonitor-crowpanel-pico-Release.picoboot.bin
-install/PiCoMonitor-picodisplay-pico_w-Release.uf2
-...
+git submodule update --init
+cmake -S . -B build -DPICO_BOARD=pico_w -DWITH_CROWPANEL=ON    # or one of the other boards above
+cmake --build build
 ```
 
-# Pages and controls
-The display has up to four pages; the extra ones appear automatically the first time the host sends the
-matching data (an older host script, or a machine without e.g. a GPU, simply never shows them):
+`-DPICO_BOARD=pico` builds for a plain Pico (default `pico_w`). The result is `build/PiCoMonitor.uf2`.
+
+`make install_firmware` builds and copies every `.bin` / `.uf2` to the git-ignored `install/`, named after the
+build options (`PiCoMonitor-<crowpanel|picodisplay|epd>-<PICO_BOARD>-<build type>.uf2`), so several variants can sit side by side.
+
+## Install
+
+Hold BOOTSEL while plugging the Pico and copy the `.uf2` to it, or:
+```
+sudo picotool load -f -x PiCoMonitor.uf2
+```
+Then start the host script (below).
+
+## Host script
+
+`host_script/PiCoMonitor.py` (Windows, Ubuntu, Raspberry Pi OS; needs `psutil`, `pyserial`, `pystray`) finds the Pico by its USB id:
+```
+python host_script/PiCoMonitor.py                # auto-detect the port
+python host_script/PiCoMonitor.py --list-ports   # show serial ports / what was detected
+python host_script/PiCoMonitor.py -p /dev/ttyACM0  # force a port (COM3 on Windows)
+python host_script/PiCoMonitor.py --no-tray      # headless (servers, Raspberry Pi OS Lite)
+```
+- Linux: your user needs serial access: `sudo usermod -aG dialout $USER` (log in again).
+- CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi). On Windows it needs
+  LibreHardwareMonitor (`host_script/LibreHardwareMonitor/` or `PICOMONITOR_LHM_DLL`) and administrator rights for the CPU
+  sensor (otherwise the GPU temperature is sent).
+- GPU: NVIDIA via `nvidia-ml-py` or the driver's `nvidia-smi`, AMD on Linux; Intel GPUs are not supported.
+
+## Pages and controls
+
+Up to four pages; the extra ones appear the first time the host sends the matching data.
 
 | Page | Content |
 |------|---------|
 | Overview | RAM and temperature graphs, per-core CPU bars, disk usage bars |
-| Network | download / upload and disk read / write throughput graphs (auto-scaled) |
-| System | CPU frequency, core count, load average, swap, uptime |
-| GPU | GPU load, temperature, VRAM graphs and name; with two GPUs (e.g. an NVIDIA card plus an AMD iGPU) one column each: load graph plus name, temperature and VRAM. NVIDIA anywhere with the driver (via `nvidia-ml-py` if installed, else the driver's `nvidia-smi`), AMD on Linux (amdgpu); Intel GPUs are not supported |
-
-Both boards use the same four corner controls:
+| Network | network and disk throughput graphs |
+| System | CPU frequency, cores, load average, swap, uptime |
+| GPU | load, temperature and VRAM graphs; with two GPUs, one column each |
 
 | Corner | Action |
 |--------|--------|
-| top-left | backlight up (hold to repeat) |
-| bottom-left | backlight down (hold to repeat) |
-| top-right | previous page |
-| bottom-right | next page |
+| top-left / bottom-left | backlight up / down (hold to repeat) |
+| top-right / bottom-right | previous / next page |
 
-On the Pimoroni Pico Display these are the buttons A (top-left), B (bottom-left), X (top-right), Y (bottom-right);
-on the CrowPanel touch the outer third of the screen in that corner. The page name is shown briefly after a switch.
-The Pico Display's RGB LED shows the overall status (green / orange / red; orange blinking = no signal).
+Corners are the buttons A, B, X, Y on the Pico Display Pack and the outer third of the screen corners on the CrowPanel.
+The e-paper has neither backlight nor corners: **BOOTSEL** shows the next page. The page name appears briefly after a switch.
 
-# Settings
-The backlight level and the page you were on are remembered across reboots and power cycles. They are stored in
-the last two flash sectors (8 KB, reserved so the firmware can never grow into them; they also survive PicoBoot
-reloading the app or flashing a new `.uf2`) and written only 30 seconds after you stop changing them, so holding the
-brightness corner doesn't wear the flash. If the saved page is an extra page (Network, System, GPU), it is shown as
-soon as the host has sent its data. The saved brightness is never below a minimum at boot, so a screen dimmed to black
-still comes back visible.
+Board specifics:
+- **Pico Display Pack:** the RGB LED shows the overall status (green / orange / red; blinking orange = no signal).
+- **E-paper:** colours are drawn as black on white. The panel is refreshed at most every 2 s (a page switch refreshes at once)
+  with a full clear every 30 minutes against ghosting.
 
-# Host script
-`host_script/PiCoMonitor.py` finds the Pico by itself (USB id), on Windows, Ubuntu and Raspberry Pi OS:
-```
-$ python host_script/PiCoMonitor.py                # auto-detect the port
-$ python host_script/PiCoMonitor.py --list-ports   # show serial ports / what was detected
-$ python host_script/PiCoMonitor.py -p COM3        # or /dev/ttyACM0: force a port
-$ python host_script/PiCoMonitor.py --no-tray      # headless (servers, Raspberry Pi OS Lite)
-```
-On Linux your user needs access to the serial device: `sudo usermod -aG dialout $USER` (log in again).
-CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi); on Windows it needs
-LibreHardwareMonitor (`host_script/LibreHardwareMonitor/` or `PICOMONITOR_LHM_DLL`), and administrator
-rights for the CPU sensor (otherwise the GPU temperature is sent).
+## Settings
 
-# Installation
-- Copy uf2 file to the pico or use picotool: 
-```
-sudo picotool load -f -x PiCoMonitor.uf2 
-```
-- When launched, start `host_script/PiCoMonitor.py` on the host to monitor.
+Backlight level and current page survive reboots. They are stored in the last two flash sectors and written 30 s after the
+last change, so holding a button doesn't wear the flash.
 
+## PicoBoot
+
+Each build also produces `PiCoMonitor.picoboot.bin` (+ `.picoboot.uf2`): the same firmware linked into the application
+partition (`0x10080000`) of the [PicoBoot](../PicoBoot) bootloader. Put the **`.bin`** on PicoBoot's SD card. The saved
+settings are kept when PicoBoot reloads the app.
+
+The image needs a PicoBoot checkout (default `../PicoBoot`, override with `-DPICOBOOT_DIR=...`; skipped with a warning if
+absent). Options: `-DWITH_PICOBOOT=OFF` to disable it, `-DPICOMONITOR_FLASH_SIZE=<bytes>` for the board's flash size (default 2 MiB).
+`install_firmware` copies it as `PiCoMonitor-<board>-<PICO_BOARD>-<build type>.picoboot.bin`.
