@@ -183,7 +183,19 @@ Optional extra keys (omitted by the host when the platform cannot provide them; 
 `[1, 5, 15]`, `SWAP` %, `UP` seconds, `GPU` an array with one `{"n": name, "l": load %, "t": temp, "mu": VRAM used MB,
 "mt": VRAM total MB}` per GPU (NVML devices first, then AMD sysfs cards; the firmware keeps the first
 `kMaxGpus` = 2; a single object is accepted too). Host GPU sources: NVIDIA via NVML (`nvidia-ml-py`, optional) or,
-without it, the driver's `nvidia-smi` (polled at most every 2 s, it spawns a process); AMD via Linux sysfs. With two GPUs the GPU page switches to two columns. A full frame is ~450 bytes; the firmware's frame buffer is 2048.
+without it, the driver's `nvidia-smi` (polled at most every 2 s, it spawns a process); AMD via Linux sysfs. With two GPUs the GPU page switches to two columns. A full frame is ~450 bytes (compact JSON); the firmware's frame buffer is 2048.
+
+**Host load / sticky values**: graphed values (`CPU`, `TEMP`, `RAM`, `NET`, `IO`, `GPU`) are sent in every frame (one graph point
+per frame); slow ones (`DISKS` 30 s, `FREQ` 2 s, `LOAD`/`SWAP` 5 s, `UP` 10 s: `Metric.every_s`) only when refreshed, and the
+firmware remembers the last value (`MonitorData::has_disks`, `Pages::m_sys`): an explicit empty `DISKS` list clears the disks,
+an absent key does not. `Metric.cache_s` reuses a read value (still sent every frame; `TEMP` 2 s, `GPU` 1 s). After every
+(re)connection `DataCollector.on_connected()` makes everything due again (the firmware may have restarted). Measured on a
+12-core Ubuntu box: 7.2 ms CPU/frame (1.4 % of a core at 0.5 s) before, 3.3 ms (0.66 %) after; frame 521 -> ~250 bytes.
+
+**UI commands** (host -> device, only when the host user chose them; re-sent after each reconnection): `"PAGE": n` (a `Pages::Id`,
+a manual change: ends the cycling mode) and `"CYCLE": seconds` (0 = off, else cycling from the current page). The host never
+repeats them in later frames (that would fight the buttons). The page and cycling mode are persisted like a button change
+(30 s settle) in `Settings` (version 2 adds `cycle`; version 1 records stay readable).
 
 `src/Com.cpp` polls the USB serial input (`stdio_usb`, 19200 baud, ignored by
 USB CDC) without blocking and feeds `FrameAssembler` (`src/Protocol.h`), which
@@ -218,6 +230,10 @@ points when set), and core/disk counts are capped (`kMaxCores`/`kMaxDisks`). The
   `PiCoMonitor.cpp` keeps its `#ifdef`s confined to the board header include +
   `using Board = ...`. Keep both board builds working when touching anything
   platform-related.
+- Page cycling (`Pages::set_cycle/advance`, firmware-side timer): any manual change (`next/prev/set_preferred`) ends it;
+  `preferred()` is the page last chosen manually (what is persisted, `Settings::page`), not the one showing during the cycle.
+  A long press (1 s, `RepeatFilter::kLongPressMs`, `InputEvents::longpressed`) on a page corner / BOOTSEL starts it.
+  `restore(page, cycle)` is the boot path (a not-yet-available page keeps the cycle idle until its data arrives).
 - Pages (`Pages.h`): `PiCoMonitor.cpp` calls `pages.update(data)` per frame and
   `pages.tick()` per loop; top-right / bottom-right (press only, `InputEvents::pressed`) switch
   page and show the page name via `OverlayWidget::show_toast`. To add a page: add its widgets and

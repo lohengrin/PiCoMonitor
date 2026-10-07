@@ -91,7 +91,12 @@ private:
     std::unique_ptr<DiskWidget> m_disks;
     // Network
     std::unique_ptr<GraphWidget> m_net_down, m_net_up, m_io_read, m_io_write;
-    // System
+    // System: the host sends these at its own pace (not in every frame), so they are remembered here
+    struct SystemState {
+        bool has_freq = false, has_load = false, has_swap = false, has_uptime = false;
+        double freq_mhz = 0.0, load_avg[3] = {0.0, 0.0, 0.0}, swap = 0.0;
+        uint32_t uptime_s = 0;
+    } m_sys;
     std::unique_ptr<InfoListWidget> m_system;
     // GPU
     std::unique_ptr<GraphWidget> m_gpu_load, m_gpu_temp, m_gpu_vram;

@@ -198,6 +198,7 @@ bool decode_data(const char* json, size_t len, MonitorData& data)
         else if (key == "DISKS")
         {
             if (r.peekType() != Type::Array) { r.skipValue(); return; }
+            data.has_disks = true;
             for_each_element(r, [&] {
                 if (r.peekType() != Type::Object || data.disks.size() >= MonitorData::kMaxDisks) { r.skipValue(); return; }
                 data.disks.emplace_back();

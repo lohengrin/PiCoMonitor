@@ -156,6 +156,25 @@ static void test_tick() {
     CHECK(!p.tick());
 }
 
+static void test_sticky_slow_values() {
+    // the host sends disks / system values only when refreshed: frames without them must not blank them
+    Fake d(240, 135); Screen s(d); Pages p(s);
+    p.update(decode(R"({"CPU":[1,2],"DISKS":[{"path":"C:","total":100,"used":50}],"FREQ":3000,"LOAD":[1,2,3],"SWAP":5,"UP":90061})"));
+    p.next();                                              // System
+    CHECK(p.current() == Pages::System);
+    s.update(); const size_t full = lit_pixels(d, 0, 0, 240, 135);
+    p.update(decode(R"({"CPU":[3,4],"TEMP":40})"));        // a fast frame: nothing slow in it
+    s.update(); CHECK(lit_pixels(d, 0, 0, 240, 135) == full);
+    p.update(decode(R"({"CPU":[3,4],"UP":90100})"));       // one value refreshed: the others stay
+    s.update(); CHECK(lit_pixels(d, 0, 0, 240, 135) >= full - 40);
+    p.prev();                                              // Overview: disks still drawn
+    s.update(); const size_t with_disk = lit_pixels(d, 120, 67, 240, 135);
+    p.update(decode(R"({"CPU":[3,4]})")); s.update();
+    CHECK(lit_pixels(d, 120, 67, 240, 135) == with_disk);
+    p.update(decode(R"({"CPU":[3,4],"DISKS":[]})")); s.update();   // an explicit empty list does clear
+    CHECK(lit_pixels(d, 120, 67, 240, 135) != with_disk);
+}
+
 static void test_cycling_mode() {
     Fake d(240, 135); Screen s(d); Pages p(s);
     p.update(decode(kBasic)); p.update(decode(kNet)); p.update(decode(kSys));   // Overview, Network, System
@@ -221,6 +240,7 @@ static void test_restore() {
 }
 
 int main() {
+    test_sticky_slow_values();
     test_cycling_mode();
     test_restore();
     test_availability_and_cycling();

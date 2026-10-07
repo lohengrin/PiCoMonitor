@@ -1,5 +1,7 @@
 #include "Pages.h"
 
+#include <algorithm>
+
 #include <cstdio>
 
 using namespace pico_toolset;
@@ -240,31 +242,36 @@ void Pages::update(const MonitorData& d)
     m_cpu->setValues(d.cpu_percent);
     if (d.has_temp) m_temp->pushValue(d.temp);
     if (d.has_ram)  m_ram->pushValue(d.ram);
-    m_disks->setValues(d.disks);
+    if (d.has_disks) m_disks->setValues(d.disks);
 
     // Network
     if (d.has_net) { m_net_down->pushValue(d.net_down); m_net_up->pushValue(d.net_up); }
     if (d.has_io)  { m_io_read->pushValue(d.io_read);   m_io_write->pushValue(d.io_write); }
     if (d.has_net || d.has_io) m_seen_net = true;
 
-    // System
-    std::vector<InfoListWidget::Row> rows;
-    if (d.has_freq)
-        rows.emplace_back("CPU freq", d.freq_mhz < 1000 ? format("%.0f MHz", d.freq_mhz) : format("%.2f GHz", d.freq_mhz / 1000.0));
-    if (!d.cpu_percent.empty())
-        rows.emplace_back("Cores", std::to_string(d.cpu_percent.size()));
-    if (d.has_load) {
-        char b[40];
-        snprintf(b, sizeof b, "%.2f %.2f %.2f", d.load_avg[0], d.load_avg[1], d.load_avg[2]);
-        rows.emplace_back("Load", b);
-    }
-    if (d.has_swap)
-        rows.emplace_back("Swap", format("%.0f %%", d.swap));
-    if (d.has_uptime)
-        rows.emplace_back("Uptime", format_uptime(d.uptime_s));
-    if (d.has_freq || d.has_load || d.has_swap || d.has_uptime) {
+    // System (each value is remembered until the host sends a new one)
+    if (d.has_freq)   { m_sys.has_freq = true;   m_sys.freq_mhz = d.freq_mhz; }
+    if (d.has_load)   { m_sys.has_load = true;   std::copy(d.load_avg, d.load_avg + 3, m_sys.load_avg); }
+    if (d.has_swap)   { m_sys.has_swap = true;   m_sys.swap = d.swap; }
+    if (d.has_uptime) { m_sys.has_uptime = true; m_sys.uptime_s = d.uptime_s; }
+    if (d.has_freq || d.has_load || d.has_swap || d.has_uptime || !d.cpu_percent.empty()) {
+        std::vector<InfoListWidget::Row> rows;
+        if (m_sys.has_freq)
+            rows.emplace_back("CPU freq", m_sys.freq_mhz < 1000 ? format("%.0f MHz", m_sys.freq_mhz) : format("%.2f GHz", m_sys.freq_mhz / 1000.0));
+        if (!d.cpu_percent.empty())
+            rows.emplace_back("Cores", std::to_string(d.cpu_percent.size()));
+        if (m_sys.has_load) {
+            char b[40];
+            snprintf(b, sizeof b, "%.2f %.2f %.2f", m_sys.load_avg[0], m_sys.load_avg[1], m_sys.load_avg[2]);
+            rows.emplace_back("Load", b);
+        }
+        if (m_sys.has_swap)
+            rows.emplace_back("Swap", format("%.0f %%", m_sys.swap));
+        if (m_sys.has_uptime)
+            rows.emplace_back("Uptime", format_uptime(m_sys.uptime_s));
         m_system->setRows(std::move(rows));
-        m_seen_system = true;
+        if (m_sys.has_freq || m_sys.has_load || m_sys.has_swap || m_sys.has_uptime)
+            m_seen_system = true;
     }
 
     // GPU (one page: the single-GPU layout, or two columns when there are two GPUs)

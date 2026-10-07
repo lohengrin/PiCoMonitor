@@ -49,11 +49,16 @@ python host_script/PiCoMonitor.py                # auto-detect the port
 python host_script/PiCoMonitor.py --list-ports   # show serial ports / what was detected
 python host_script/PiCoMonitor.py -p /dev/ttyACM0  # force a port (COM3 on Windows)
 python host_script/PiCoMonitor.py --no-tray      # headless (servers, Raspberry Pi OS Lite)
+python host_script/PiCoMonitor.py --page gpu     # show a page on the device (overview, network, system, gpu)
+python host_script/PiCoMonitor.py --cycle 20     # page cycling mode, a new page every 20 s (--cycle alone: 30 s, 0: off)
 ```
+The tray menu has the same choices (page, cycling period) plus the frame period (0.25 / 0.5 / 1 / 2 s, default 0.5 s).
 - Linux: your user needs serial access: `sudo usermod -aG dialout $USER` (log in again).
 - CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi). On Windows it needs
   LibreHardwareMonitor (`host_script/LibreHardwareMonitor/` or `PICOMONITOR_LHM_DLL`) and administrator rights for the CPU
   sensor (otherwise the GPU temperature is sent).
+- Load: the script reads sensors only as often as needed (slow values such as disks every 30 s, temperature every 2 s) and
+  sends compact frames, about 0.7 % of one core at the default period.
 - GPU: NVIDIA via `nvidia-ml-py` or the driver's `nvidia-smi`, AMD on Linux; Intel GPUs are not supported.
 
 ## Pages and controls
@@ -71,9 +76,14 @@ Up to four pages; the extra ones appear the first time the host sends the matchi
 |--------|--------|
 | top-left / bottom-left | backlight up / down (hold to repeat) |
 | top-right / bottom-right | previous / next page |
+| top-right / bottom-right, held 1 s | page cycling mode |
 
 Corners are the buttons A, B, X, Y on the Pico Display Pack and the outer third of the screen corners on the CrowPanel.
 The e-paper has neither backlight nor corners: **BOOTSEL** shows the next page. The page name appears briefly after a switch.
+
+**Page cycling mode:** the device shows the pages one after the other, every 30 s by default, starting from the current page.
+Hold a page button (BOOTSEL on the e-paper) for 1 s to start it; any manual page change (button or host `--page`) ends it.
+The host can start it too (`--cycle`, tray).
 
 Board specifics:
 - **Pico Display Pack:** the RGB LED shows the overall status (green / orange / red; blinking orange = no signal).
@@ -82,7 +92,8 @@ Board specifics:
 
 ## Settings
 
-Backlight level and current page survive reboots. They are stored in the last two flash sectors and written 30 s after the
+Backlight level, current page and cycling mode survive reboots, whether set with the buttons or from the host (in cycling
+mode the stored page is the one it started from). They are stored in the last two flash sectors and written 30 s after the
 last change, so holding a button doesn't wear the flash.
 
 ## PicoBoot

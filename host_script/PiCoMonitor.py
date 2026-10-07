@@ -81,6 +81,11 @@ if sys.platform == "win32":
 @dataclass
 class Config:
     DEFAULT_DELAY: float = 0.5
+    DELAY_CHOICES = (0.25, 0.5, 1.0, 2.0)       # the tray menu
+    # Page cycling (firmware side): period used by --cycle / the tray when none is given, and its limits
+    DEFAULT_CYCLE_S: int = 30
+    MIN_CYCLE_S: int = 2
+    MAX_CYCLE_S: int = 255
     MAX_RETRY_ATTEMPTS: int = 3
     SERIAL_TIMEOUT: int = 1
     # A device that stops reading (frozen firmware, stalled hub) must not block the host forever:
@@ -918,6 +923,13 @@ class SystemTrayIcon:
         self.contflag = True
         self.delay = config.DEFAULT_DELAY
         self.current_delay = self.delay
+        # What the user last picked in the menu (None: nothing chosen, the device keeps its own state)
+        self.page: Optional[str] = None
+        self.cycle: Optional[int] = None
+        # Tell the data collector (set by Application)
+        self.on_delay: Optional[Callable[[float], None]] = None
+        self.on_page: Optional[Callable[[str], None]] = None
+        self.on_cycle: Optional[Callable[[int], None]] = None
         # Called when the user picks Exit (set by Application: stops the data collector too)
         self.on_exit: Optional[Callable[[], None]] = None
         # Called from the GUI main loop on SIGINT/SIGTERM (GTK backends only, see run())
@@ -934,23 +946,48 @@ class SystemTrayIcon:
     
     def create_menu(self) -> Menu:
         """Create system tray menu"""
+        delays = [MenuItem(f'{d:.2f} s', (lambda d: lambda i: self.set_delay(d))(d),
+                           checked=(lambda d: lambda i: self.get_delay(d))(d), radio=True)
+                  for d in config.DELAY_CHOICES]
+        pages = [MenuItem(name.capitalize() if name != 'gpu' else 'GPU', (lambda n: lambda i: self.set_page(n))(name),
+                          checked=(lambda n: lambda i: self.page == n)(name), radio=True)
+                 for name in DataCollector.PAGES]
+        cycles = [MenuItem('Off' if c == 0 else f'{c} s', (lambda c: lambda i: self.set_cycle(c))(c),
+                           checked=(lambda c: lambda i: self.cycle == c)(c), radio=True)
+                  for c in (0, 10, config.DEFAULT_CYCLE_S, 60)]
         return Menu(
-            MenuItem('0.25 s', lambda i: self.set_delay(0.25), checked=lambda i: self.get_delay(0.25)),
-            MenuItem('0.50 s', lambda i: self.set_delay(0.5), checked=lambda i: self.get_delay(0.5)),
-            MenuItem('1.00 s', lambda i: self.set_delay(1.0), checked=lambda i: self.get_delay(1.0)),
+            *delays,
+            Menu.SEPARATOR,
+            MenuItem('Page', Menu(*pages)),
+            MenuItem('Cycle pages', Menu(*cycles)),
             Menu.SEPARATOR,
             MenuItem('Exit', lambda: self.exit_action())
         )
-    
+
     def set_delay(self, delay_value: float):
         """Set the data collection delay"""
         self.delay = delay_value
+        if self.on_delay:
+            self.on_delay(delay_value)
         logger.info(f"Delay set to {delay_value}s")
-    
+
     def get_delay(self, delay_value: float) -> bool:
         """Check if current delay matches the given value"""
         return self.delay == delay_value
-    
+
+    def set_page(self, page: str):
+        """Show a page on the device (this ends its cycling mode)"""
+        self.page = page
+        self.cycle = 0
+        if self.on_page:
+            self.on_page(page)
+
+    def set_cycle(self, seconds: int):
+        """Cycle through the pages every `seconds` (0 = off)"""
+        self.cycle = seconds
+        if self.on_cycle:
+            self.on_cycle(seconds)
+
     def exit_action(self):
         """Handle application exit"""
         try:
@@ -1036,31 +1073,40 @@ class Metric:
     collect: Callable[['DataCollector'], Any]
     fallback: Any = None
     optional: bool = False   # omitted from the frame when unavailable (None) instead of sent as null
+    # Host load: reading a sensor costs CPU/IO, most values change slowly. Two knobs (seconds, 0 = off):
+    cache_s: float = 0.0     # reuse the last value this long; it is still sent with every frame
+    every_s: float = 0.0     # read AND send only this often; the firmware keeps the last value in between
 
 
 def default_metrics() -> List[Metric]:
     # Looked up through SystemMonitor at call time (patchable in tests)
     return [
+        # Graphed values are sent with every frame (the graphs advance one point per frame)
         Metric('CPU', lambda dc: SystemMonitor.get_cpu_usage(dc.delay), []),   # blocks `delay` s: paces the loop
-        Metric('TEMP', lambda dc: SystemMonitor.get_cpu_temperature(), None),
+        Metric('TEMP', lambda dc: SystemMonitor.get_cpu_temperature(), None, cache_s=2.0),
         Metric('RAM', lambda dc: SystemMonitor.get_memory_usage(), None),
-        Metric('DISKS', lambda dc: SystemMonitor.get_disk_usage(), []),
+        # Slow values (info lists, disk bars) are sent when refreshed; the firmware remembers them
+        Metric('DISKS', lambda dc: SystemMonitor.get_disk_usage(), [], every_s=30.0),
         # Optional extras, shown on the firmware's extra pages. Anything the
         # platform cannot provide is simply left out of the frame.
         Metric('NET', lambda dc: dc.rates.network(), optional=True),     # [down, up] KB/s
         Metric('IO', lambda dc: dc.rates.disk_io(), optional=True),      # [read, write] KB/s
-        Metric('FREQ', lambda dc: SystemMonitor.get_cpu_frequency(), optional=True),   # MHz
-        Metric('LOAD', lambda dc: SystemMonitor.get_load_average(), optional=True),    # [1, 5, 15 min]
-        Metric('SWAP', lambda dc: SystemMonitor.get_swap_usage(), optional=True),      # %
-        Metric('UP', lambda dc: SystemMonitor.get_uptime(), optional=True),            # seconds
-        Metric('GPU', lambda dc: dc.gpu.read(), optional=True),
+        Metric('FREQ', lambda dc: SystemMonitor.get_cpu_frequency(), optional=True, every_s=2.0),   # MHz
+        Metric('LOAD', lambda dc: SystemMonitor.get_load_average(), optional=True, every_s=5.0),    # [1, 5, 15 min]
+        Metric('SWAP', lambda dc: SystemMonitor.get_swap_usage(), optional=True, every_s=5.0),      # %
+        Metric('UP', lambda dc: SystemMonitor.get_uptime(), optional=True, every_s=10.0),           # seconds
+        Metric('GPU', lambda dc: dc.gpu.read(), optional=True, cache_s=1.0),
     ]
 
 
 class DataCollector:
     """Class to handle data collection and serial communication"""
     
-    def __init__(self, port: Optional[str], initial_delay: float, metrics: Optional[List[Metric]] = None):
+    # Page names as the firmware numbers them (Pages::Id)
+    PAGES = {'overview': 0, 'network': 1, 'system': 2, 'gpu': 3}
+
+    def __init__(self, port: Optional[str], initial_delay: float, metrics: Optional[List[Metric]] = None,
+                 clock: Callable[[], float] = time.monotonic):
         # port None = auto-detect (re-evaluated at every (re)connection attempt)
         self.port = port
         self.delay = initial_delay
@@ -1070,30 +1116,93 @@ class DataCollector:
         self.rates = RateTracker()
         self.gpu = GpuMonitor()
         self._wake = threading.Event()
-    
+        self._clock = clock
+        self._read_at: Dict[str, float] = {}      # metric key -> when it was last read
+        self._cached: Dict[str, Any] = {}         # metric key -> last value (for cache_s metrics)
+        # UI commands: what the user chose (re-sent after every (re)connection, the firmware may
+        # have restarted) and what still has to go out. Nothing is sent unless the user chose.
+        self._ui_lock = threading.Lock()
+        self._ui_wanted: Dict[str, int] = {}
+        self._ui_pending: Dict[str, int] = {}
+
+    def set_delay(self, delay: float):
+        """Period of the data frames (takes effect at the next frame)"""
+        self.delay = delay
+
+    def set_page(self, page: str):
+        """Show a page ('overview', 'network', 'system', 'gpu'): ends the cycling mode"""
+        index = self.PAGES[page.lower()]
+        with self._ui_lock:
+            self._ui_wanted.pop('CYCLE', None)
+            self._ui_wanted['PAGE'] = index
+            self._ui_pending.update(PAGE=index, CYCLE=0)
+        logger.info(f"Page set to {page}")
+
+    def set_cycle(self, seconds: int):
+        """Page cycling mode: a new page every `seconds` (0 = off), starting from the current page"""
+        seconds = int(seconds)
+        if seconds and not (config.MIN_CYCLE_S <= seconds <= config.MAX_CYCLE_S):
+            raise ValueError(f"Cycle period must be {config.MIN_CYCLE_S}-{config.MAX_CYCLE_S} s, got {seconds}")
+        with self._ui_lock:
+            self._ui_wanted['CYCLE'] = seconds
+            self._ui_pending['CYCLE'] = seconds
+        logger.info(f"Page cycling {'every %d s' % seconds if seconds else 'off'}")
+
+    def on_connected(self):
+        """A (new) connection: everything is due again, including the user's page / cycling choice"""
+        self._read_at.clear()
+        self._cached.clear()
+        with self._ui_lock:
+            self._ui_pending = dict(self._ui_wanted)
+
+    def _read_metric(self, metric: Metric, now: float):
+        """(value, fresh): fresh=False when a cached value is reused"""
+        cached = self._cached.get(metric.key)
+        if metric.cache_s and metric.key in self._cached and metric.key in self._read_at \
+                and now - self._read_at[metric.key] < metric.cache_s:
+            return cached, False
+        try:
+            value = metric.collect(self)
+        except Exception as e:
+            logger.error(f"Metric {metric.key} failed: {e}")
+            value = metric.fallback
+        self._read_at[metric.key] = now
+        if metric.cache_s:
+            self._cached[metric.key] = value
+        return value, True
+
     def collect_system_data(self) -> Dict[str, Any]:
-        """Collect system monitoring data"""
+        """Collect system monitoring data: the keys of this frame (slow ones are left out until due)"""
         data = {}
+        now = self._clock()
         for metric in self.metrics:
-            try:
-                value = metric.collect(self)
-            except Exception as e:
-                logger.error(f"Metric {metric.key} failed: {e}")
-                value = metric.fallback
+            if metric.every_s and metric.key in self._read_at and now - self._read_at[metric.key] < metric.every_s:
+                continue
+            value, _ = self._read_metric(metric, now)
             if value is None and metric.optional:
                 continue
             data[metric.key] = value
+        with self._ui_lock:
+            data.update(self._ui_pending)
         return data
+
+    def _ui_sent(self, data: Dict[str, Any]):
+        """The frame went out: its UI commands are done (unless the user changed them meanwhile)"""
+        with self._ui_lock:
+            for key in ('PAGE', 'CYCLE'):
+                if key in data and self._ui_pending.get(key) == data[key]:
+                    del self._ui_pending[key]
     
     def send_data_via_serial(self, data: Dict[str, Any], serial_conn: serial.Serial):
         """Send data via serial connection"""
         try:
-            serialized_data = json.dumps(data)
+            serialized_data = json.dumps(data, separators=(',', ':'))
             if not serial_conn or not serial_conn.is_open:
                 logger.warning("Serial port not open for writing")
                 return False
             # Use UTF-8 to be safe with any characters
             serial_conn.write(serialized_data.encode('utf-8'))
+            self._ui_sent(data)
             # No flush(): it waits for the device to drain the data with no timeout, which would
             # hang forever on a stalled device. write() is already bounded by write_timeout and
             # hands the data to the driver immediately.
@@ -1144,6 +1253,7 @@ class DataCollector:
                     # (SerialPortManager already logged the connection)
                     # Reset back‑off after a successful connection
                     retry_delay = 2
+                    self.on_connected()
                     # Data loop – collect and send until a serial error occurs or shutdown
                     while self.contflag:
                         try:
@@ -1216,6 +1326,13 @@ class ArgumentValidator:
         return True
     
     @staticmethod
+    def validate_cycle(seconds: Optional[int]) -> bool:
+        """Page cycling period (None: not given, 0: off)"""
+        if seconds is not None and seconds != 0 and not (config.MIN_CYCLE_S <= seconds <= config.MAX_CYCLE_S):
+            raise ValueError(f"Cycle period must be 0 (off) or {config.MIN_CYCLE_S}-{config.MAX_CYCLE_S} seconds, got {seconds}")
+        return True
+
+    @staticmethod
     def validate_serial_port(port: Optional[str]) -> bool:
         """Validate serial port format (None = auto-detect)"""
         if port is None:
@@ -1243,6 +1360,7 @@ class ArgumentValidator:
         """Validate all arguments"""
         try:
             ArgumentValidator.validate_delay(args.delay)
+            ArgumentValidator.validate_cycle(getattr(args, "cycle", None))
             ArgumentValidator.validate_serial_port(args.port)
             ArgumentValidator.validate_required_modules()
             
@@ -1278,6 +1396,12 @@ class Application:
         argParser.add_argument("--no-tray", help="Run without the system tray icon (headless / servers / Raspberry Pi OS Lite)",
                                action="store_true")
         
+        argParser.add_argument("--page", choices=sorted(DataCollector.PAGES, key=DataCollector.PAGES.get),
+                               help="Show this page on the device (also ends its cycling mode)")
+        argParser.add_argument("--cycle", nargs="?", const=config.DEFAULT_CYCLE_S, default=None, type=int, metavar="SECONDS",
+                               help=f"Cycle through the pages every SECONDS (default {config.DEFAULT_CYCLE_S}, "
+                                    f"{config.MIN_CYCLE_S}-{config.MAX_CYCLE_S}; 0 = off). Both settings are stored by the device")
+
         # Add logging level option
         argParser.add_argument("--debug", help="Enable debug logging", action="store_true")
         
@@ -1329,6 +1453,11 @@ class Application:
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
     
+    def _arg(self, name: str, kind: type):
+        """A command line value of the expected type, else None (older/foreign argument objects)"""
+        value = getattr(self.args, name, None)
+        return value if isinstance(value, kind) else None
+
     def initialize_components(self):
         """Initialize application components"""
         # Initialize system tray icon (optional: --no-tray or no tray backend -> headless)
@@ -1336,6 +1465,9 @@ class Application:
         if not getattr(self.args, "no_tray", False):
             try:
                 tray = SystemTrayIcon()
+                tray.delay = self.args.delay
+                tray.page = self._arg("page", str)
+                tray.cycle = self._arg("cycle", int)
                 tray.initialize()
                 tray.on_exit = lambda: self.shutdown("tray Exit")
                 tray.on_signal = lambda sig: (logger.info(f"Received signal {sig}"), self.shutdown(f"signal {sig}"))
@@ -1345,6 +1477,15 @@ class Application:
         
         # Initialize data collector
         self.data_collector = DataCollector(self.args.port, self.args.delay)
+        if self.tray_icon is not None:
+            self.tray_icon.on_delay = self.data_collector.set_delay
+            self.tray_icon.on_page = self.data_collector.set_page
+            self.tray_icon.on_cycle = self.data_collector.set_cycle
+        # UI commands given on the command line (sent to the device whenever it connects)
+        if self._arg("page", str):
+            self.data_collector.set_page(self.args.page)
+        if self._arg("cycle", int) is not None:
+            self.data_collector.set_cycle(self.args.cycle)
     
     def run(self):
         """Run the main application"""

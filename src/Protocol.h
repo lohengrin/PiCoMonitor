@@ -26,8 +26,9 @@ struct MonitorData {
 
     //! By core CPU usage (%)
     std::vector<double> cpu_percent;
-    //! All disks data
+    //! All disks data -- only meaningful if has_disks (the host sends it every ~30 s, not in every frame)
     std::vector<DiskData> disks;
+    bool has_disks = false;
     //! RAM used (%) -- only meaningful if has_ram
     double ram = 0.0;
     //! System temperature -- only meaningful if has_temp
