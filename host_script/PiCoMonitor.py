@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 
 from PIL import Image, ImageDraw
+from icon_art import draw_icon
 
 
 # Optional NVIDIA GPU support (pure-python wrapper; the NVIDIA driver library is
@@ -1010,7 +1011,7 @@ class SystemTrayIcon:
         """Initialize system tray icon"""
         if pystray is None:
             raise RuntimeError("pystray/tray backend unavailable")
-        self.icon = pystray.Icon('PiCoMonitor', icon=self.create_image(64, 64, 'blue', 'white'))
+        self.icon = pystray.Icon('PiCoMonitor', icon=draw_icon(64))
         self.icon.menu = self.create_menu()
         self.icon.title = self.title
     

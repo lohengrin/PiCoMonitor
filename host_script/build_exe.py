@@ -30,10 +30,10 @@ def build_exe():
         'PiCoMonitor.py'          # Main script
     ]
     
-    # Check if we have a custom icon
+    # The icon is generated from icon_art.py (committed, regenerate with make_icon.py)
     if not os.path.exists('icon.ico'):
-        print("Warning: icon.ico not found, using default icon")
-        build_params.remove('--icon=icon.ico')
+        from make_icon import make_icon
+        make_icon()
     
     # Check if LibreHardwareMonitor is present
     if not os.path.exists(os.path.join('LibreHardwareMonitor', 'LibreHardwareMonitorLib.dll')):

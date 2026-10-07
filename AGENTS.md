@@ -64,6 +64,8 @@ tests/                         host-side unit tests for the protocol layer (cmak
 host_script/
     PiCoMonitor.py             host monitoring daemon (CLI args, tray icon, logging)
     build_exe.py / *.spec      PyInstaller packaging
+    icon_art.py / make_icon.py icon (level bars): drawn with Pillow for the tray icon; make_icon.py writes icon.ico
+                               (committed, used by the .exe build) and assets/icon.png; assets/icon.svg is the vector source
     tests/                     pytest suite (mirrors every host module)
     pytest.ini                 host test configuration
     requirements*.txt          host Python dependencies
