@@ -31,29 +31,57 @@ public:
     bool tick();
 
     //! Switch to the next / previous available page (the screen's slots are
-    //! updated)
+    //! updated). A manual change: it also ends the cycling mode.
     void next() { step(+1); }
     void prev() { step(-1); }
 
     Id current() const { return m_current; }
 
-    //! Wants `id` to be shown: switches at once if that page is available, else
-    //! as soon as it becomes available (an extra page only exists after the host
-    //! has sent its data). A user switch (next/prev) cancels a pending request.
+    //! Manually selects `id` (a button, or the host): switches at once if that page is
+    //! available, else as soon as it becomes available (an extra page only exists after the
+    //! host has sent its data). Ends the cycling mode. A user switch (next/prev) cancels a
+    //! pending request.
     void set_preferred(Id id);
-    //! The page to persist: the pending request if any, else the current page
-    Id preferred() const { return m_pending >= 0 ? static_cast<Id>(m_pending) : m_current; }
+    //! Boot: shows `id` as set_preferred() does but then (cycle_s > 0) resumes the cycling mode
+    //! from it, once it is shown
+    void restore(Id id, uint8_t cycle_s);
+    //! The page to persist: the pending request if any, else the page last selected manually
+    //! (in cycling mode: the page it started from, not the one showing now)
+    Id preferred() const { return m_pending >= 0 ? static_cast<Id>(m_pending) : m_base; }
     bool available(Id id) const;
     //! "2/3 Network": position among the available pages and the page name
     std::string toast() const;
 
+    //! Cycling mode: the pages are shown one after the other, every `seconds` (0 = off),
+    //! starting from the current page. Any manual page change ends it.
+    static constexpr uint8_t kDefaultCycleS = 30;
+    void set_cycle(uint8_t seconds);
+    //! Starts the cycling mode with the last period used (kDefaultCycleS at first)
+    void start_cycle() { set_cycle(m_cycle_period); }
+    //! Cycling period in seconds, 0 when the mode is off (this is what gets persisted)
+    uint8_t cycle_s() const { return m_cycle_s; }
+    //! "Cycling 30 s"
+    std::string cycle_toast() const;
+    //! Call once per main-loop iteration with a millisecond clock: moves to the next
+    //! page when the cycling period has elapsed
+    //! @return true when the page changed
+    bool advance(uint32_t now_ms);
+
 private:
     void step(int dir);
+    int next_available(int from, int dir) const;
+    void select(Id id);          // page chosen manually: shows it (or waits for it), becomes the persisted page
+    void show(Id id);
     void apply();
 
     pico_toolset::Screen& m_screen;
     Id m_current = Overview;
+    Id m_base = Overview;   // page last selected manually (persisted)
     int m_pending = -1;   // requested page not available yet (-1: none)
+    uint8_t m_cycle_s = 0;                  // cycling period, 0 = off
+    uint8_t m_cycle_period = kDefaultCycleS; // last period used
+    bool m_cycle_arm = false;               // (re)start the cycle timer at the next advance()
+    uint32_t m_cycle_deadline_ms = 0;
     bool m_seen_net = false, m_seen_system = false;
     size_t m_gpu_count = 0;   // most GPUs seen so far (0 = the GPU page does not exist yet)
 

@@ -173,6 +173,14 @@ bool decode_data(const char* json, size_t len, MonitorData& data)
             double up;
             if (read_number(r, up) && up >= 0 && up < 4294967295.0) { data.has_uptime = true; data.uptime_s = static_cast<uint32_t>(up); }
         }
+        else if (key == "PAGE" || key == "CYCLE")
+        {
+            double n;
+            if (read_number(r, n) && n >= 0 && n <= 255 && n == std::floor(n)) {
+                if (key == "PAGE") { data.has_page = true; data.page = static_cast<uint8_t>(n); }
+                else               { data.has_cycle = true; data.cycle_s = static_cast<uint8_t>(n); }
+            }
+        }
         else if (key == "GPU")
         {
             // an array with one object per GPU (a single object is accepted too)

@@ -39,6 +39,6 @@ InputEvents CrowPanelBoard::poll_input() {
     m_zone = zone;
     const uint8_t held = (zone != 0 && m_zone_frames >= kDebouncePolls) ? zone : 0;
     InputEvents ev;
-    ev.fired = m_repeat.update(held, to_ms_since_boot(get_absolute_time()), &ev.pressed);
+    ev.fired = m_repeat.update(held, to_ms_since_boot(get_absolute_time()), &ev.pressed, &ev.longpressed);
     return ev;
 }

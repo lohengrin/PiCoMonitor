@@ -5,15 +5,23 @@ size_t Settings::serialize(uint8_t* out) const
     out[0] = kVersion;
     out[1] = backlight;
     out[2] = page;
+    out[3] = cycle;
     return kSize;
 }
 
 bool Settings::deserialize(const uint8_t* data, size_t len, Settings& out)
 {
+    if (len >= 3 && data[0] == 1) {         // before the cycling mode existed
+        out.backlight = data[1];
+        out.page = data[2];
+        out.cycle = 0;
+        return true;
+    }
     if (len < kSize || data[0] != kVersion)
         return false;
     out.backlight = data[1];
     out.page = data[2];
+    out.cycle = data[3];
     return true;
 }
 

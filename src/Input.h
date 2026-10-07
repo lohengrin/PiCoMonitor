@@ -20,6 +20,7 @@ enum Corner : uint8_t {
 struct InputEvents {
     uint8_t fired = 0;    //! corners to act on: presses plus auto-repeats (e.g. backlight)
     uint8_t pressed = 0;  //! corners just pressed, no repeats (e.g. page switching)
+    uint8_t longpressed = 0;  //! corners that have just been held for RepeatFilter::kLongPressMs (once per hold)
 };
 
 /// @brief Corner zone containing a pixel position (touch boards): each corner
@@ -46,19 +47,24 @@ class RepeatFilter {
 public:
     static constexpr uint32_t kRepeatMs = 200;
     static constexpr uint32_t kHoldMs = 1000;
+    //! A corner held this long reports a long press (once)
+    static constexpr uint32_t kLongPressMs = 1000;
 
     //! @param held    mask of corners currently held down
     //! @param now_ms  monotonic milliseconds
     //! @param pressed if given, receives the corners that were *just* pressed
     //!                (no auto-repeats): for actions that must not repeat
+    //! @param long_pressed if given, receives the corners that have just reached kLongPressMs held
     //! @return mask of corners that fire on this call (presses + repeats)
-    uint8_t update(uint8_t held, uint32_t now_ms, uint8_t* pressed = nullptr) {
+    uint8_t update(uint8_t held, uint32_t now_ms, uint8_t* pressed = nullptr, uint8_t* long_pressed = nullptr) {
         if (pressed) *pressed = 0;
+        if (long_pressed) *long_pressed = 0;
         uint8_t fired = 0;
         for (int i = 0; i < 4; ++i) {
             const uint8_t bit = static_cast<uint8_t>(1u << i);
             if (!(held & bit)) {
                 m_down &= static_cast<uint8_t>(~bit);
+                m_long_done &= static_cast<uint8_t>(~bit);
                 continue;
             }
             if (!(m_down & bit)) {              // new press
@@ -67,6 +73,10 @@ public:
                 fired |= bit;
                 if (pressed) *pressed |= bit;
                 continue;
+            }
+            if (!(m_long_done & bit) && now_ms - m_pressed_ms[i] >= kLongPressMs) {
+                m_long_done |= bit;
+                if (long_pressed) *long_pressed |= bit;
             }
             uint32_t rate = kRepeatMs;
             if (now_ms - m_pressed_ms[i] > kHoldMs)
@@ -81,6 +91,7 @@ public:
 
 private:
     uint8_t  m_down = 0;
+    uint8_t  m_long_done = 0;
     uint32_t m_pressed_ms[4] = {};
     uint32_t m_last_ms[4] = {};
 };

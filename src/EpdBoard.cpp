@@ -46,12 +46,11 @@ EpdBoard::EpdBoard() : m_driver(s_framebuffer, Epd2in13V4::kWidth, Epd2in13V4::k
 
 InputEvents EpdBoard::poll_input() {
     InputEvents ev;
-    const bool now = bootsel_pressed();
-    if (now && !m_button_prev) {
-        ev.pressed = ev.fired = CornerBottomRight;
+    // BOOTSEL acts as the bottom-right corner (next page; held: page cycling)
+    ev.fired = m_repeat.update(bootsel_pressed() ? CornerBottomRight : 0, to_ms_since_boot(get_absolute_time()),
+                               &ev.pressed, &ev.longpressed);
+    if (ev.pressed || ev.longpressed)
         m_urgent = true;          // answer a button press without waiting
-    }
-    m_button_prev = now;
     return ev;
 }
 

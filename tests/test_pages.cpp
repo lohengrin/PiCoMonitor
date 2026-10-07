@@ -156,7 +156,73 @@ static void test_tick() {
     CHECK(!p.tick());
 }
 
+static void test_cycling_mode() {
+    Fake d(240, 135); Screen s(d); Pages p(s);
+    p.update(decode(kBasic)); p.update(decode(kNet)); p.update(decode(kSys));   // Overview, Network, System
+    p.next();                                        // manual: Network
+    CHECK(p.preferred() == Pages::Network && p.cycle_s() == 0);
+
+    // starts from the current page; the persisted page stays the one it started from
+    p.set_cycle(30);
+    CHECK(p.cycle_s() == 30 && p.current() == Pages::Network && p.preferred() == Pages::Network);
+    CHECK(!p.advance(1000));                         // first call arms the timer
+    CHECK(!p.advance(30999));                        // not yet
+    CHECK(p.advance(31000) && p.current() == Pages::System);
+    CHECK(p.preferred() == Pages::Network && p.cycle_s() == 30);     // nothing new to store
+    CHECK(p.advance(61000) && p.current() == Pages::Overview);       // wraps (Gpu not available)
+    CHECK(!p.advance(61001));
+
+    // a page that appears joins the cycle; the clock wrap (uint32) is harmless
+    p.update(decode(kGpu));
+    CHECK(p.advance(91000) && p.current() == Pages::Network);
+
+    // any manual change ends it, and becomes the persisted page
+    p.next();
+    CHECK(p.cycle_s() == 0 && p.current() == Pages::System && p.preferred() == Pages::System);
+    CHECK(!p.advance(200000));
+
+    // a host page command is a manual change too
+    p.set_cycle(10);
+    p.set_preferred(Pages::Gpu);
+    CHECK(p.cycle_s() == 0 && p.current() == Pages::Gpu && p.preferred() == Pages::Gpu);
+
+    // start_cycle() reuses the last period; the toast names it
+    p.set_cycle(15); p.set_cycle(0);
+    CHECK(p.cycle_s() == 0);
+    p.start_cycle();
+    CHECK(p.cycle_s() == 15 && p.cycle_toast() == "Cycling 15 s");
+    p.set_cycle(0);
+
+    // clock wrap
+    p.set_cycle(5);
+    CHECK(!p.advance(0xFFFFFF00u));
+    CHECK(!p.advance(0xFFFFFF00u + 4000));
+    CHECK(p.advance(0xFFFFFF00u + 5000));
+    CHECK(p.advance(0xFFFFFF00u + 10000));           // across the 2^32 boundary
+}
+
+static void test_restore() {
+    // boot with a stored cycling mode whose start page is not available yet: nothing cycles until it is
+    Fake d(240, 135); Screen s(d); Pages p(s);
+    p.update(decode(kBasic)); p.update(decode(kNet));
+    p.restore(Pages::Gpu, 20);
+    CHECK(p.current() == Pages::Overview && p.cycle_s() == 20 && p.preferred() == Pages::Gpu);
+    CHECK(!p.advance(0)); CHECK(!p.advance(60000));  // inert while the page is pending
+    p.update(decode(kGpu));                          // data arrives: shows it, the cycling mode goes on
+    CHECK(p.current() == Pages::Gpu && p.cycle_s() == 20 && p.preferred() == Pages::Gpu);
+    CHECK(!p.advance(100000));                       // arms
+    CHECK(p.advance(120000) && p.current() == Pages::Overview);
+    CHECK(p.preferred() == Pages::Gpu);
+
+    // plain restore without cycling; bad page falls back to Overview
+    Fake d2(240, 135); Screen s2(d2); Pages q(s2);
+    q.restore(static_cast<Pages::Id>(77), 0);
+    CHECK(q.current() == Pages::Overview && q.cycle_s() == 0);
+}
+
 int main() {
+    test_cycling_mode();
+    test_restore();
     test_availability_and_cycling();
     test_preferred_page();
     test_two_gpus();

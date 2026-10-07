@@ -95,7 +95,7 @@ int main()
 	uint8_t target_backlight = std::max(settings.backlight, MinBootBacklight);
 	uint8_t backlight = target_backlight;
 	board.set_backlight(backlight);
-	pages.set_preferred(static_cast<Pages::Id>(settings.page));
+	pages.restore(static_cast<Pages::Id>(settings.page), settings.cycle);
 
 	// The screen is only re-rendered when something changed (new data, a CPU
 	// max marker still falling, the NO SIGNAL banner toggling).
@@ -125,6 +125,14 @@ int main()
 			dirty = true;
 		}
 
+		// Long press on a page corner (BOOTSEL on the e-paper): page cycling mode
+		if (input.longpressed & (CornerTopRight | CornerBottomRight))
+		{
+			pages.start_cycle();
+			overlay->show_toast(pages.cycle_toast(), PageToastFrames);
+			dirty = true;
+		}
+
 		// Poll the serial input; a complete valid frame updates the widgets
 		MonitorData data;
 		if (poll_frame(data))
@@ -133,6 +141,12 @@ int main()
 
 			// Update widget data (all pages)
 			pages.update(data);
+
+			// Host commands (sent only when its user changed the page / cycling mode)
+			if (data.has_page)
+				pages.set_preferred(static_cast<Pages::Id>(data.page));
+			if (data.has_cycle)
+				pages.set_cycle(data.cycle_s);
 
 			lastUpdate = get_absolute_time();
 			hadData = true;
@@ -157,6 +171,8 @@ int main()
 		// pages) and the page-name toast timing out keep the screen redrawing
 		if (pages.tick())
 			dirty = true;
+		if (pages.advance(to_ms_since_boot(now)))   // cycling mode
+			dirty = true;
 		if (overlay->tick())
 			dirty = true;
 
@@ -172,6 +188,7 @@ int main()
 		Settings wanted;
 		wanted.backlight = target_backlight;
 		wanted.page = static_cast<uint8_t>(pages.preferred());
+		wanted.cycle = pages.cycle_s();
 		saver.update(wanted, to_ms_since_boot(now));
 
 		// Manage dimming if no data

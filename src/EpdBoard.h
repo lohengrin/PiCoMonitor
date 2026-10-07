@@ -30,7 +30,7 @@ public:
     //! No backlight
     void set_backlight(uint8_t) {}
 
-    //! BOOTSEL = next page (press only)
+    //! BOOTSEL = next page (long press: page cycling)
     InputEvents poll_input();
     //! No status LED
     void set_status(Status) {}
@@ -47,7 +47,7 @@ private:
     bool m_pending = false;
     bool m_urgent = false;          // refresh now, whatever the minimum delay
     bool m_has_shown = false;
-    bool m_button_prev = false;
+    RepeatFilter m_repeat;
     uint32_t m_last_refresh_ms = 0;
     uint32_t m_last_clear_ms = 0;
 };

@@ -12,12 +12,13 @@
 /// handling in deserialize() (old records must stay readable or be ignored).
 struct Settings {
     uint8_t backlight = 255;  //! user backlight level (0-255)
-    uint8_t page = 0;         //! Pages::Id of the page to show
+    uint8_t page = 0;         //! Pages::Id of the page to show (in cycling mode: the page it started from)
+    uint8_t cycle = 0;        //! page cycling period in seconds, 0 = off
 
-    static constexpr uint8_t kVersion = 1;
-    static constexpr size_t kSize = 3;   // version, backlight, page
+    static constexpr uint8_t kVersion = 2;       // version 1 (no `cycle`) records are still read
+    static constexpr size_t kSize = 4;   // version, backlight, page, cycle
 
-    bool operator==(const Settings& o) const { return backlight == o.backlight && page == o.page; }
+    bool operator==(const Settings& o) const { return backlight == o.backlight && page == o.page && cycle == o.cycle; }
     bool operator!=(const Settings& o) const { return !(*this == o); }
 
     size_t serialize(uint8_t* out) const;

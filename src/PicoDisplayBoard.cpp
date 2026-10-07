@@ -29,7 +29,7 @@ InputEvents PicoDisplayBoard::poll_input() {
     m_buttons.poll();
     // Button indices follow the corner bit order: A=TL, B=BL, X=TR, Y=BR
     InputEvents ev;
-    ev.fired = m_repeat.update(m_buttons.held_mask(), to_ms_since_boot(get_absolute_time()), &ev.pressed);
+    ev.fired = m_repeat.update(m_buttons.held_mask(), to_ms_since_boot(get_absolute_time()), &ev.pressed, &ev.longpressed);
     return ev;
 }
 

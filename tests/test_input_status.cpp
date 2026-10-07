@@ -6,6 +6,32 @@
 static int failures = 0;
 #define CHECK(cond) do { if (!(cond)) { printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond); failures++; } } while (0)
 
+static void test_long_press() {
+    RepeatFilter r; uint8_t pressed, lp;
+    r.update(CornerBottomRight, 0, &pressed, &lp);
+    CHECK(pressed == CornerBottomRight && lp == 0);
+    for (uint32_t t = 10; t < RepeatFilter::kLongPressMs; t += 10) {
+        r.update(CornerBottomRight, t, &pressed, &lp);
+        CHECK(lp == 0);
+    }
+    r.update(CornerBottomRight, RepeatFilter::kLongPressMs, &pressed, &lp);
+    CHECK(lp == CornerBottomRight);                       // reported once...
+    r.update(CornerBottomRight, RepeatFilter::kLongPressMs + 10, &pressed, &lp);
+    CHECK(lp == 0);
+    r.update(CornerBottomRight, 5000, &pressed, &lp);
+    CHECK(lp == 0);
+    r.update(0, 5010, &pressed, &lp);                     // ...released, then again on the next long hold
+    r.update(CornerTopRight, 6000, &pressed, &lp);
+    CHECK(lp == 0);
+    r.update(CornerTopRight, 6000 + RepeatFilter::kLongPressMs, &pressed, &lp);
+    CHECK(lp == CornerTopRight);
+    // a short tap never reports it
+    RepeatFilter q;
+    q.update(CornerTopRight, 0, &pressed, &lp); q.update(0, 300, &pressed, &lp);
+    q.update(CornerTopRight, 400, &pressed, &lp); q.update(0, 700, &pressed, &lp);
+    CHECK(lp == 0);
+}
+
 static void test_repeat() {
     // press fires once immediately, nothing while no time has passed
     { RepeatFilter r;
@@ -97,6 +123,7 @@ static void test_status() {
 
 int main() {
     test_repeat();
+    test_long_press();
     test_corners();
     test_pressed_edges();
     test_status();

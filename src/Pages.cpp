@@ -101,34 +101,96 @@ bool Pages::available(Id id) const
     }
 }
 
-void Pages::set_preferred(Id id)
+void Pages::show(Id id)
+{
+    if (id != m_current) {
+        m_current = id;
+        apply();
+    }
+}
+
+void Pages::select(Id id)
 {
     if (id < 0 || id >= kCount)
         return;
     if (available(id)) {
         m_pending = -1;
-        if (id != m_current) {
-            m_current = id;
-            apply();
-        }
+        m_base = id;
+        show(id);
     } else {
         m_pending = id;
     }
 }
 
-void Pages::step(int dir)
+void Pages::set_preferred(Id id)
 {
-    m_pending = -1;     // the user chose: forget the restored page
-    int id = m_current;
+    if (id < 0 || id >= kCount)
+        return;
+    m_cycle_s = 0;
+    select(id);
+}
+
+void Pages::restore(Id id, uint8_t cycle_s)
+{
+    if (id < 0 || id >= kCount)
+        id = Overview;
+    select(id);
+    if (cycle_s > 0) {
+        m_cycle_s = m_cycle_period = cycle_s;
+        m_cycle_arm = true;
+    }
+}
+
+void Pages::set_cycle(uint8_t seconds)
+{
+    m_cycle_s = seconds;
+    if (seconds == 0)
+        return;
+    m_cycle_period = seconds;
+    m_cycle_arm = true;
+    if (m_pending < 0)
+        m_base = m_current;     // it starts from the page showing now
+}
+
+std::string Pages::cycle_toast() const
+{
+    return "Cycling " + std::to_string(m_cycle_s) + " s";
+}
+
+int Pages::next_available(int from, int dir) const
+{
+    int id = from;
     for (int i = 0; i < kCount; ++i) {
         id = (id + dir + kCount) % kCount;
         if (available(static_cast<Id>(id)))
-            break;
+            return id;
     }
-    if (id != m_current) {
-        m_current = static_cast<Id>(id);
-        apply();
+    return from;
+}
+
+void Pages::step(int dir)
+{
+    m_pending = -1;     // the user chose: forget the restored page
+    m_cycle_s = 0;      // ... and the cycling mode ends
+    show(static_cast<Id>(next_available(m_current, dir)));
+    m_base = m_current;
+}
+
+bool Pages::advance(uint32_t now_ms)
+{
+    if (m_cycle_s == 0 || m_pending >= 0)
+        return false;
+    if (m_cycle_arm) {
+        m_cycle_arm = false;
+        m_cycle_deadline_ms = now_ms + m_cycle_s * 1000u;
+        return false;
     }
+    if (static_cast<int32_t>(now_ms - m_cycle_deadline_ms) < 0)
+        return false;
+    m_cycle_deadline_ms = now_ms + m_cycle_s * 1000u;
+    const Id before = m_current;
+    show(static_cast<Id>(next_available(m_current, +1)));   // m_base stays: the page the cycle started from
+    return m_current != before;
 }
 
 void Pages::apply()
@@ -243,6 +305,8 @@ void Pages::update(const MonitorData& d)
     }
 
     // A restored page that was not available at boot: show it once it is
-    if (m_pending >= 0 && available(static_cast<Id>(m_pending)))
-        set_preferred(static_cast<Id>(m_pending));
+    if (m_pending >= 0 && available(static_cast<Id>(m_pending))) {
+        select(static_cast<Id>(m_pending));
+        m_cycle_arm = true;     // a restored cycling mode starts now that its page is shown
+    }
 }

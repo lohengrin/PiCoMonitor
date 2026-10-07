@@ -144,6 +144,17 @@ static void test_decode() {
 
 // Frames the assembler accepts (balanced braces) but that are not valid JSON must neither hang nor
 // crash the decoder, whatever they contain
+static void test_ui_commands() {
+    bool ok;
+    { MonitorData d = decode(R"({"PAGE":2,"CYCLE":30,"TEMP":1})", &ok);
+      CHECK(ok && d.has_page && d.page == 2 && d.has_cycle && d.cycle_s == 30 && d.has_temp); }
+    { MonitorData d = decode(R"({"CYCLE":0})", &ok); CHECK(d.has_cycle && d.cycle_s == 0 && !d.has_page); }
+    // out of range / wrong type / fractional: ignored, the frame still decodes
+    { MonitorData d = decode(R"({"PAGE":-1,"CYCLE":300,"RAM":5})", &ok); CHECK(ok && !d.has_page && !d.has_cycle && d.has_ram); }
+    { MonitorData d = decode(R"({"PAGE":"gpu","CYCLE":1.5})", &ok); CHECK(ok && !d.has_page && !d.has_cycle); }
+    { MonitorData d = decode(kSample, &ok); CHECK(!d.has_page && !d.has_cycle); }
+}
+
 static void test_hostile() {
     bool ok;
     // unterminated array inside a balanced frame (used to be an endless loop risk)
@@ -185,6 +196,7 @@ static void test_hostile() {
 }
 
 int main() {
+    test_ui_commands();
     test_hostile();
     test_assembler();
     test_decode();

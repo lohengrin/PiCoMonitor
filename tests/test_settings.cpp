@@ -170,7 +170,7 @@ static void test_corruption_and_power_loss() {
 }
 
 static void test_settings() {
-    Settings s; s.backlight = 120; s.page = 2;
+    Settings s; s.backlight = 120; s.page = 2; s.cycle = 30;
     uint8_t buf[8];
     CHECK(s.serialize(buf) == Settings::kSize);
     Settings d; CHECK(Settings::deserialize(buf, Settings::kSize, d) && d == s);
@@ -178,7 +178,10 @@ static void test_settings() {
     buf[0] = 99;                                      // unknown version: ignored
     CHECK(!Settings::deserialize(buf, Settings::kSize, x) && x.backlight == 1);
     buf[0] = Settings::kVersion;
-    CHECK(!Settings::deserialize(buf, 2, x));         // short record
+    CHECK(!Settings::deserialize(buf, 3, x));         // short record
+    // a record from before the cycling mode (version 1) is still read, cycling off
+    { const uint8_t v1[3] = {1, 77, 3}; Settings o; o.cycle = 9;
+      CHECK(Settings::deserialize(v1, 3, o) && o.backlight == 77 && o.page == 3 && o.cycle == 0); }
     CHECK(Settings::deserialize(buf, 8, x) && x == s);   // longer (future) records still readable
 
     fake::reset();

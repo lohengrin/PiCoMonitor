@@ -51,6 +51,12 @@ struct MonitorData {
     bool   has_uptime = false;   //! seconds since boot
     uint32_t uptime_s = 0;
 
+    //! Host commands for the UI (sent only when the host user changed them)
+    bool has_page = false;       //! select this Pages::Id (a manual change: ends the cycling mode)
+    uint8_t page = 0;
+    bool has_cycle = false;      //! cycling mode period in seconds, 0 = off
+    uint8_t cycle_s = 0;
+
     /// @brief One GPU (NVIDIA / AMD); the host lists every GPU it finds, none on e.g. a Raspberry Pi
     struct Gpu {
         std::string name;
