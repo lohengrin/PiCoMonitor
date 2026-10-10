@@ -54,6 +54,13 @@ python host_script/PiCoMonitor.py --cycle 20     # page cycling mode, a new page
 ```
 The tray menu has the same choices (page, cycling period) plus the frame period (0.25 / 0.5 / 1 / 2 s, default 0.5 s).
 - Linux: your user needs serial access: `sudo usermod -aG dialout $USER` (log in again).
+- Raspberry Pi OS (bookworm/trixie, Wayland): the panel's tray is AppIndicator-only, so the tray icon
+  needs `sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1` **and** a venv that can see the
+  system packages (`python3 -m venv --system-site-packages venv`), or `/usr/bin/python3` with apt's
+  `python3-pystray`. With an isolated venv pystray silently picks an XEmbed backend and no icon shows;
+  the script warns about it, and `--no-tray` runs headless. The panel also only renders icons found in
+  the icon theme, so the script installs its own there on first run (a running panel may need
+  `pkill wf-panel-pi` or a logout to pick it up).
 - CPU temperature works out of the box on Linux (Intel, AMD, Raspberry Pi). On Windows it needs
   LibreHardwareMonitor (`host_script/LibreHardwareMonitor/` or `PICOMONITOR_LHM_DLL`) and administrator rights for the CPU
   sensor (otherwise the GPU temperature is sent).

@@ -43,6 +43,17 @@ argparse>=1.4.0,<2.0        # Command line argument parsing (usually built-in)
 #
 # 4. On Linux, you may need additional system packages:
 #    sudo apt-get install python3-dev libatlas-base-dev
+#
+# 5. Raspberry Pi OS (bookworm/trixie, Wayland) tray icon: the panel only offers
+#    an AppIndicator tray, so pystray needs PyGObject + an ayatana indicator
+#    library (system packages), and the venv must see system site-packages:
+#      sudo apt-get install python3-gi gir1.2-ayatanaappindicator3-0.1
+#      python3 -m venv --system-site-packages venv
+#    An isolated venv hides 'gi', pystray then picks an XEmbed backend and the
+#    icon silently never appears. Alternatively run /usr/bin/python3 with apt's
+#    python3-pystray, or use --no-tray. The panel also only renders icons that
+#    exist in the icon theme, so the script installs its own there on startup
+#    (a running panel may need `pkill wf-panel-pi` or a logout to pick it up).
 
 # Version Compatibility Notes
 # ---------------------------

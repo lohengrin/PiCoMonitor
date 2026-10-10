@@ -28,6 +28,31 @@ sudo apt-get install python3-pip python3-dev libatlas-base-dev
 sudo usermod -a -G dialout $USER
 ```
 
+#### Tray icon on Raspberry Pi OS (bookworm/trixie, Wayland)
+
+Raspberry Pi OS uses Wayland (`labwc`/Wayfire) and its panel only provides an
+**AppIndicator** system tray, so the tray icon needs PyGObject and an ayatana
+indicator library (both are *system* packages, not pip packages):
+
+```bash
+sudo apt-get install python3-gi gir1.2-ayatanaappindicator3-0.1
+```
+
+pystray must be able to `import gi`. A virtual environment created with a plain
+`python3 -m venv venv` hides the system packages, so pystray falls back to its
+Xorg/XEmbed backend, which has no tray under Wayland: the icon silently never
+appears. Create the venv with system site-packages instead:
+
+```bash
+python3 -m venv --system-site-packages venv
+```
+
+The panel can also only load icons that live in the icon theme, so on startup the
+script installs its tray icon there itself
+(`~/.local/share/icons/hicolor/<size>/apps/picomonitor.png`). A panel that was
+already running when the icon first appeared may need a restart
+(`pkill wf-panel-pi`) or a logout to pick it up.
+
 ## Detailed Installation
 
 ### Windows Installation
@@ -54,9 +79,12 @@ sudo usermod -a -G dialout $USER
    ```
 2. **Create virtual environment (recommended)**:
    ```bash
-   python3 -m venv venv
+   python3 -m venv --system-site-packages venv
    source venv/bin/activate
    ```
+   `--system-site-packages` matters for the tray icon: PyGObject (`python3-gi`) is
+   only available as a system package, and an isolated venv hides it, which makes
+   pystray fall back to an XEmbed backend that has no tray under Wayland.
 3. **Install requirements**:
    ```bash
    pip install -r requirements.txt
@@ -64,6 +92,8 @@ sudo usermod -a -G dialout $USER
 4. **Install system dependencies**:
    ```bash
    sudo apt-get install libatlas-base-dev
+   # Raspberry Pi OS tray icon (Wayland): AppIndicator backend
+   sudo apt-get install python3-gi gir1.2-ayatanaappindicator3-0.1
    sudo usermod -a -G dialout $USER
    ```
 5. **Log out and back in** for group changes to take effect
@@ -90,6 +120,25 @@ sudo usermod -a -G dialout $USER
   ```bash
   sudo usermod -a -G dialout $USER
   ```
+
+#### Tray icon missing on Raspberry Pi OS (Wayland)
+- **Symptom**: The script runs and collects data, but no icon appears in the panel; a log line may say
+  `Tray icon: pystray selected the Xorg backend, which has no system tray under Wayland`.
+- **Cause**: pystray's AppIndicator backend needs PyGObject (`import gi`), which a plain
+  (non-`--system-site-packages`) venv hides, so pystray selects its XEmbed backend. Under Wayland there
+  is no XEmbed system tray.
+- **Solution**: Install the system packages and recreate the venv with system site-packages (or use
+  `/usr/bin/python3` with `apt`'s `python3-pystray`):
+  ```bash
+  sudo apt-get install python3-gi gir1.2-ayatanaappindicator3-0.1
+  python3 -m venv --system-site-packages venv
+  source venv/bin/activate && pip install -r requirements.txt
+  ```
+  Or run headless with `--no-tray`.
+- **Note on the icon itself**: the panel can only load icons that exist in the icon theme, so the
+  script installs its own icon there on startup (`~/.local/share/icons/hicolor/<size>/apps/picomonitor.png`,
+  plus the theme cache). A panel that was already running when the icon was first installed may need a
+  restart (`pkill wf-panel-pi`, respawned automatically) or a logout to pick it up.
 
 #### Missing LibreHardwareMonitorLib.dll
 - **Solution**: Download from https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases and extract into `LibreHardwareMonitor/`

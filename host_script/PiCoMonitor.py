@@ -350,6 +350,99 @@ class LogSetup:
 logger_setup = LogSetup()
 logger = logger_setup.logger
 
+# Name the tray icon is published under in the user's icon theme. Raspberry Pi OS's
+# panel (wf-panel-pi) can only render a StatusNotifierItem icon it can look up in the
+# icon theme: pystray normally publishes a bare temp-file path as IconName, which that
+# panel cannot load. _appindicator_icon_class() installs the icon into the theme and
+# switches the indicator to this name (see below).
+_TRAY_ICON_NAME = "picomonitor"
+
+
+def _install_tray_theme_icon(base=None):
+    """Install the tray icon into the user's hicolor icon theme. This is required on
+    Raspberry Pi OS: its panel (wf-panel-pi) can only render a StatusNotifierItem
+    icon it can look up in the icon theme -- a bare temp-file path, which is what
+    pystray normally publishes, renders nothing. Idempotent and best-effort: a
+    failure just leaves the icon as the (invisible) temp file on that host."""
+    try:
+        root = base or os.path.join(os.path.expanduser("~"), ".local", "share",
+                                    "icons", "hicolor")
+        for size in (32, 64):
+            directory = os.path.join(root, f"{size}x{size}", "apps")
+            os.makedirs(directory, exist_ok=True)
+            draw_icon(size).save(os.path.join(directory, _TRAY_ICON_NAME + ".png"))
+        try:
+            subprocess.run(["gtk-update-icon-cache", "-f", "-t", root],
+                           timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError):
+            pass          # no cache: GTK falls back to scanning the directory
+    except Exception as e:
+        logger.debug(f"Installing the tray icon into the icon theme failed: {e}")
+
+
+_tray_icon_class_cache = None
+
+
+def _appindicator_icon_class():
+    """The pystray Icon class to build the tray icon with.
+
+    On Linux with pystray's AppIndicator backend the icon is published over DBus as a
+    StatusNotifierItem whose IconName pystray normally sets to a temporary file. The
+    Raspberry Pi OS panel can only load *theme* icons, so the icon is installed in the
+    user's hicolor theme and a subclass of pystray's icon is returned that sets the
+    theme name instead. Every other backend is returned unchanged."""
+    global _tray_icon_class_cache
+    if _tray_icon_class_cache is None:
+        cls = pystray.Icon
+        if sys.platform.startswith("linux") \
+                and getattr(pystray.Icon, "__module__", "") == "pystray._appindicator":
+            try:
+                from pystray._appindicator import Icon as _AppIndicatorIcon
+                from pystray._util.gtk import mainloop
+                from gi.repository import AyatanaAppIndicator3 as AppIndicator
+
+                class _ThemedAppIndicatorIcon(_AppIndicatorIcon):
+                    @mainloop
+                    def _show(self):
+                        # Register the item (menu, title, status) first and only then publish the
+                        # theme icon: the panel then receives the resulting NewIcon *after* it has
+                        # created its widget, which is when it (re)reads the icon properties.
+                        self._appindicator.set_menu(
+                            self._menu_handle or self._create_default_menu())
+                        self._appindicator.set_title(self.title)
+                        self._appindicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+                        self._appindicator.set_icon_full(_TRAY_ICON_NAME, "PiCoMonitor")
+
+                    @mainloop
+                    def _update_icon(self):
+                        self._appindicator.set_icon_full(_TRAY_ICON_NAME, "PiCoMonitor")
+
+                _install_tray_theme_icon()
+                cls = _ThemedAppIndicatorIcon
+            except Exception as e:
+                logger.debug(f"Themed AppIndicator icon unavailable, using pystray's default: {e}")
+        _tray_icon_class_cache = cls
+    return _tray_icon_class_cache
+
+
+def warn_if_tray_backend_unsupported():
+    """Warn when pystray uses its Xorg/XEmbed backend under Wayland. Raspberry Pi
+    OS Bookworm/Trixie (Wayland/labwc) only offers an AppIndicator tray, so an
+    XEmbed icon never docks: pystray swallows that error in its setup thread and
+    the icon silently never appears. This happens when PyGObject ('gi') is not
+    importable, typically because the venv was created without
+    --system-site-packages and hides the system python3-gi package."""
+    if pystray is None or not sys.platform.startswith("linux"):
+        return
+    if not os.environ.get("WAYLAND_DISPLAY"):
+        return
+    if pystray.Icon.__module__.endswith("_xorg"):
+        logger.warning("Tray icon: pystray selected the Xorg backend, which has no system tray "
+                       "under Wayland -- the icon will not appear. Install 'python3-gi' and "
+                       "'gir1.2-ayatanaappindicator3-0.1', recreate the venv with "
+                       "--system-site-packages, or run with --no-tray")
+
+
 class HardwareMonitor:
     """Temperature through LibreHardwareMonitor (Windows only)"""
 
@@ -1011,10 +1104,12 @@ class SystemTrayIcon:
         """Initialize system tray icon"""
         if pystray is None:
             raise RuntimeError("pystray/tray backend unavailable")
-        self.icon = pystray.Icon('PiCoMonitor', icon=draw_icon(64))
+        warn_if_tray_backend_unsupported()
+        icon_class = _appindicator_icon_class()
+        self.icon = icon_class('PiCoMonitor', icon=draw_icon(64))
         self.icon.menu = self.create_menu()
         self.icon.title = self.title
-    
+
     def stop_icon(self):
         """Hide the icon and end its event loop (safe to call from any thread, more than once)"""
         if self.icon:
